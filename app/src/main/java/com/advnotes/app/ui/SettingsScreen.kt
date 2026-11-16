@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -55,6 +56,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -71,7 +73,6 @@ import com.advnotes.app.BuildConfig
 import com.advnotes.app.ai.AiClients
 import com.advnotes.app.ai.DownloadState
 import com.advnotes.app.ai.LlamaBridge
-import com.advnotes.app.ai.LocalLlama
 import com.advnotes.app.ai.MathSolver
 import com.advnotes.app.ai.SolveMode
 import com.advnotes.app.data.FingerMode
@@ -372,29 +373,24 @@ private fun LocalModelsConfig() {
             IconButton(onClick = { confirmDelete = m }) { Icon(Icons.Default.Delete, "Delete") }
         }
     }
-    Spacer(Modifier.height(8.dp))
-    Text("Download", style = MaterialTheme.typography.labelLarge)
-    LocalLlama.PRESETS.forEach { preset ->
-        val d = downloads[preset.name]
-        val installed = models.any { it.name == preset.name && it.ready }
+    // downloads in progress (or failed) for models that aren't installed yet
+    downloads.filterKeys { k -> models.none { it.name == k && it.ready } }.forEach { (name, d) ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(preset.name)
+                Text(name)
                 when (d) {
                     is DownloadState.Running -> {
                         LinearProgressIndicator({ d.progress }, Modifier.fillMaxWidth().padding(vertical = 4.dp))
                         Text("${d.label} ${(d.progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
                     }
                     is DownloadState.Failed -> Text(d.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    null -> Text(if (installed) "Installed" else preset.approxSize, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            when {
-                d is DownloadState.Running -> TextButton(onClick = { app.downloads.cancel(preset.name) }) { Text("Cancel") }
-                !installed -> IconButton(onClick = { app.downloads.download(preset) }) { Icon(Icons.Default.Download, "Download") }
-            }
+            TextButton(onClick = { app.downloads.cancel(name) }) { Text(if (d is DownloadState.Running) "Cancel" else "Dismiss") }
         }
     }
+    Spacer(Modifier.height(8.dp))
+    HuggingFaceSearch()
     Spacer(Modifier.height(8.dp))
     ImportModel()
     Spacer(Modifier.height(8.dp))
@@ -569,4 +565,158 @@ private fun ToolsSection() {
         OutlinedButton(onClick = { pick.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }) { Text("Install tool from .zip…") }
         message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
+}
+
+/** Search Hugging Face for GGUF vision models and download one (model + mmproj projector). */
+@Composable
+private fun HuggingFaceSearch() {
+    val app = AdvNotesApp.instance
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var query by remember { mutableStateOf("") }
+    var results by remember { mutableStateOf<List<com.advnotes.app.ai.HuggingFace.Repo>>(emptyList()) }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var picked by remember { mutableStateOf<String?>(null) }
+    var showAll by remember { mutableStateOf(false) }
+    val token = remember { app.settings.secret("hf_token") }
+
+    fun search() {
+        loading = true; error = null; showAll = false
+        scope.launch {
+            try { results = com.advnotes.app.ai.HuggingFace.search(query, app.settings.secret("hf_token")) }
+            catch (e: Exception) { error = e.message; results = emptyList() }
+            loading = false
+        }
+    }
+    LaunchedEffect(Unit) { search() }
+    LaunchedEffect(query) {
+        if (query.isNotBlank()) { kotlinx.coroutines.delay(500); search() }
+    }
+
+    Text("Find a model on Hugging Face", style = MaterialTheme.typography.labelLarge)
+    Text(
+        "The solver needs a vision model: a GGUF repo that also has an mmproj (vision projector) file. " +
+            "Small models (1–4B parameters, Q4) run best on phones.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    OutlinedTextField(
+        query, { query = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        placeholder = { Text("e.g. qwen vl, gemma, smolvlm, minicpm") },
+        trailingIcon = {
+            if (loading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            else IconButton(onClick = { search() }) { Icon(Icons.Default.Refresh, "Search") }
+        },
+    )
+    Text(if (query.isBlank()) "Trending vision models" else "Most downloaded GGUF models for “${query.trim()}”",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    if (!loading && error == null && results.isEmpty()) Text("No GGUF models found.", style = MaterialTheme.typography.bodySmall)
+    (if (showAll) results else results.take(8)).forEach { r ->
+        Row(
+            Modifier.fillMaxWidth().selectable(false, onClick = { picked = r.id }).padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(r.id, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "↓ ${compact(r.downloads)} · ♥ ${compact(r.likes)}" + (if (r.vision) " · vision" else "") +
+                        (if (r.updated.isNotEmpty()) " · ${r.updated}" else ""),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(Icons.Default.Download, "Choose files")
+        }
+    }
+    if (!showAll && results.size > 8) TextButton(onClick = { showAll = true }) { Text("Show ${results.size - 8} more") }
+    SecretField("Hugging Face token (only for gated models, e.g. Gemma)", token ?: "") { app.settings.setSecret("hf_token", it.ifBlank { null }) }
+
+    picked?.let { repo -> ModelFilesDialog(repo, onDismiss = { picked = null }) }
+}
+
+private fun compact(n: Long): String = when {
+    n >= 1_000_000 -> "%.1fM".format(n / 1e6)
+    n >= 1_000 -> "%.1fk".format(n / 1e3)
+    else -> n.toString()
+}
+
+private fun gb(bytes: Long) = "%.2f GB".format(bytes / 1e9)
+
+@Composable
+private fun ModelFilesDialog(repo: String, onDismiss: () -> Unit) {
+    val app = AdvNotesApp.instance
+    val ctx = LocalContext.current
+    var files by remember { mutableStateOf<com.advnotes.app.ai.HuggingFace.RepoFiles?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var model by remember { mutableStateOf<com.advnotes.app.ai.HuggingFace.GgufFile?>(null) }
+    var proj by remember { mutableStateOf<com.advnotes.app.ai.HuggingFace.GgufFile?>(null) }
+    var name by remember { mutableStateOf("") }
+    val ramBytes = remember {
+        val am = ctx.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.totalMem
+    }
+    LaunchedEffect(repo) {
+        try {
+            val f = com.advnotes.app.ai.HuggingFace.files(repo, app.settings.secret("hf_token"))
+            files = f
+            model = com.advnotes.app.ai.HuggingFace.defaultModel(f.models)
+            proj = com.advnotes.app.ai.HuggingFace.defaultProjector(f.projectors)
+        } catch (e: Exception) { error = e.message }
+    }
+    LaunchedEffect(model) {
+        model?.let { m -> name = repo.substringAfterLast('/').removeSuffix("-GGUF").removeSuffix("-gguf") + (if (m.quant.isNotEmpty()) " (${m.quant})" else "") }
+    }
+    val f = files
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(repo.substringAfterLast('/'), maxLines = 2) },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(repo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                when {
+                    error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
+                    f == null -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                    f.models.isEmpty() -> Text("No GGUF model files in this repository.")
+                    else -> {
+                        if (f.projectors.isEmpty()) Text(
+                            "This repository has no mmproj (vision projector) file, so the model can't read your handwriting. " +
+                                "Look for another upload of the same model (ggml-org, unsloth and bartowski usually include one).",
+                            color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text("Model file", style = MaterialTheme.typography.labelLarge)
+                        f.models.forEach { m ->
+                            RadioRow("${m.quant.ifEmpty { m.name }} · ${gb(m.size)}" + if (m.isSplit) " · split, not supported" else "",
+                                model == m, enabled = !m.isSplit) { model = m }
+                        }
+                        if (f.projectors.isNotEmpty()) {
+                            Text("Vision projector", style = MaterialTheme.typography.labelLarge)
+                            f.projectors.forEach { p -> RadioRow("${p.quant.ifEmpty { p.name }} · ${gb(p.size)}", proj == p) { proj = p } }
+                        }
+                        val total = (model?.size ?: 0) + (proj?.size ?: 0)
+                        Text("Download: ${gb(total)}" + if (ramBytes > 0) " · this device has ${gb(ramBytes)} RAM" else "", style = MaterialTheme.typography.bodySmall)
+                        if (ramBytes > 0 && total > ramBytes * 0.6) Text(
+                            "Probably too big for this device: the model must fit in memory. Pick a smaller quantisation or model.",
+                            color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
+                        )
+                        OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = model != null && proj != null && name.isNotBlank(),
+                onClick = {
+                    app.downloads.download(
+                        name.trim(),
+                        com.advnotes.app.ai.HuggingFace.downloadUrl(repo, model!!.path),
+                        com.advnotes.app.ai.HuggingFace.downloadUrl(repo, proj!!.path),
+                        app.settings.secret("hf_token"),
+                    )
+                    onDismiss()
+                },
+            ) { Text("Download") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

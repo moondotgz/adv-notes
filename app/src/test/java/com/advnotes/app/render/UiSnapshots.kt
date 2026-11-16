@@ -20,6 +20,10 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -259,6 +263,27 @@ class UiSnapshots {
         rule.onNodeWithContentDescriptionCompat("Toggle keyboard") // hide…
         rule.onNodeWithContentDescriptionCompat("Toggle keyboard") // …and show again
         snap("20_calculator_large_font")
+    }
+
+    @Test fun localModelSearch() {
+        com.advnotes.app.ai.LlamaBridge.forceAvailable = true
+        AdvNotesApp.instance.settings.update { it.copy(provider = com.advnotes.app.data.ProviderType.LOCAL) }
+        rule.onNodeWithContentDescriptionCompat("Settings")
+        // let the (live) trending search finish
+        rule.waitUntil(20_000) { rule.onAllNodesWithText("Trending vision models", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        Thread.sleep(4000); rule.waitForIdle()
+        rule.onNodeWithText("Hugging Face token (only for gated models, e.g. Gemma)", useUnmergedTree = true).performScrollTo()
+        rule.waitForIdle()
+        snap("21_hf_search")
+        // open the Qwen2.5-VL repo via search
+        rule.onNode(androidx.compose.ui.test.hasSetTextAction() and androidx.compose.ui.test.hasText("e.g. qwen vl, gemma, smolvlm, minicpm", substring = true))
+            .performTextInput("Qwen2.5-VL-3B-Instruct-GGUF")
+        rule.waitUntil(20_000) { rule.onAllNodesWithText("ggml-org/Qwen2.5-VL-3B-Instruct-GGUF", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        rule.onAllNodesWithText("ggml-org/Qwen2.5-VL-3B-Instruct-GGUF", useUnmergedTree = true)[0].performScrollTo().performClick()
+        rule.waitUntil(20_000) { rule.onAllNodesWithText("Vision projector", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitForIdle()
+        snap("22_hf_files")
+        rule.onNode(androidx.compose.ui.test.hasText("Download") and androidx.compose.ui.test.hasClickAction(), useUnmergedTree = false).assertIsEnabled()
     }
 
     private fun androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>.onNodeWithContentDescriptionCompat(desc: String) {

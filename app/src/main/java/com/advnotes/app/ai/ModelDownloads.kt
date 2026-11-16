@@ -27,12 +27,13 @@ class ModelDownloads(private val local: LocalLlama) {
 
     private fun set(name: String, s: DownloadState?) = _state.update { if (s == null) it - name else it + (name to s) }
 
-    fun download(preset: ModelPreset) = run(preset.name) { name ->
-        val dir = local.dirFor(name)
-        set(name, DownloadState.Running("Projector", 0f))
-        local.download(preset.mmprojUrl, java.io.File(dir, "mmproj.gguf")) { set(name, DownloadState.Running("Projector", it)) }
-        set(name, DownloadState.Running("Model", 0f))
-        local.download(preset.modelUrl, java.io.File(dir, "model.gguf")) { set(name, DownloadState.Running("Model", it)) }
+    /** Downloads a model and its vision projector (mmproj) into models/<name>/. */
+    fun download(name: String, modelUrl: String, mmprojUrl: String, token: String?) = run(name) { n ->
+        val dir = local.dirFor(n)
+        set(n, DownloadState.Running("Projector", 0f))
+        local.download(mmprojUrl, java.io.File(dir, "mmproj.gguf"), token) { set(n, DownloadState.Running("Projector", it)) }
+        set(n, DownloadState.Running("Model", 0f))
+        local.download(modelUrl, java.io.File(dir, "model.gguf"), token) { set(n, DownloadState.Running("Model", it)) }
     }
 
     fun import(name: String, model: Uri, mmproj: Uri) = run(name) { n ->

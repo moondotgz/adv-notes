@@ -21,9 +21,14 @@ object LlamaBridge {
         fun onToken(piece: String): Boolean
     }
 
-    val available: Boolean by lazy {
+    /** Tests (no native library on the JVM) can force the UI to treat the runner as available. */
+    @androidx.annotation.VisibleForTesting
+    var forceAvailable = false
+
+    private val loaded: Boolean by lazy {
         BuildConfig.HAS_LLAMA && runCatching { System.loadLibrary("advnotes_llama"); true }.getOrDefault(false)
     }
+    val available: Boolean get() = forceAvailable || loaded
 
     external fun load(modelPath: String, mmprojPath: String, nCtx: Int, nThreads: Int): Long
     external fun generate(handle: Long, prompt: String, image: ByteArray?, maxTokens: Int, cb: TokenCallback): String
@@ -39,35 +44,10 @@ data class LocalModel(val name: String, val dir: File) {
     val sizeBytes get() = (if (model.exists()) model.length() else 0) + (if (mmproj.exists()) mmproj.length() else 0)
 }
 
-data class ModelPreset(val name: String, val modelUrl: String, val mmprojUrl: String, val approxSize: String)
-
 /**
  * Runs vision models fully on-device with llama.cpp. Models live in app storage under models/<name>/.
  */
 class LocalLlama(private val context: Context, private val settings: SettingsStore) : AiClient {
-    companion object {
-        val PRESETS = listOf(
-            ModelPreset(
-                "Qwen2.5-VL-3B-Instruct (Q4_K_M)",
-                "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
-                "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf",
-                "≈2.6 GB",
-            ),
-            ModelPreset(
-                "Gemma-3-4B-it (Q4_K_M)",
-                "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf",
-                "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/mmproj-model-f16.gguf",
-                "≈3.3 GB",
-            ),
-            ModelPreset(
-                "SmolVLM2-2.2B-Instruct (Q4_K_M)",
-                "https://huggingface.co/ggml-org/SmolVLM2-2.2B-Instruct-GGUF/resolve/main/SmolVLM2-2.2B-Instruct-Q4_K_M.gguf",
-                "https://huggingface.co/ggml-org/SmolVLM2-2.2B-Instruct-GGUF/resolve/main/mmproj-SmolVLM2-2.2B-Instruct-Q8_0.gguf",
-                "≈1.5 GB",
-            ),
-        )
-    }
-
     private val root = File(context.filesDir, "models").apply { mkdirs() }
     private val lock = Mutex()
     private var handle = 0L
@@ -84,12 +64,16 @@ class LocalLlama(private val context: Context, private val settings: SettingsSto
     }
 
     /** Downloads a file with progress (0..1). Resumes partial downloads. */
-    suspend fun download(url: String, dest: File, onProgress: (Float) -> Unit) = withContext(Dispatchers.IO) {
+    suspend fun download(url: String, dest: File, token: String? = null, onProgress: (Float) -> Unit) = withContext(Dispatchers.IO) {
         dest.parentFile?.mkdirs()
         val part = File(dest.path + ".part")
         val have = if (part.exists()) part.length() else 0L
-        val req = Request.Builder().url(url).apply { if (have > 0) header("Range", "bytes=$have-") }.build()
+        val req = Request.Builder().url(url).apply {
+            if (have > 0) header("Range", "bytes=$have-")
+            if (!token.isNullOrBlank()) header("Authorization", "Bearer $token")
+        }.build()
         Http.client.newCall(req).await().use { r ->
+            if (r.code == 401 || r.code == 403) throw AiException("This model is gated: accept its licence on huggingface.co and add your Hugging Face token.")
             if (!r.isSuccessful) throw AiException("Download failed: HTTP ${r.code}")
             val append = r.code == 206
             val total = (r.body!!.contentLength().takeIf { it > 0 } ?: -1L) + (if (append) have else 0L)

@@ -60,7 +60,7 @@ Imported PDFs and images sync to Google Drive with the notebook.
 | OpenRouter | Any vision model. |
 | Custom OpenAI-compatible | LM Studio, Ollama, llama.cpp server, vLLM, LiteLLM… (base URL + optional key) |
 | Custom Anthropic-compatible | Any `/v1/messages` server. |
-| On-device (llama.cpp) | Runs a vision model fully offline through llama.cpp + libmtmd (JNI, arm64). One-tap downloads for Qwen2.5-VL-3B, Gemma-3-4B and SmolVLM2-2.2B, or import your own GGUF + mmproj. |
+| On-device (llama.cpp) | Runs a vision model fully offline through llama.cpp + libmtmd (JNI, arm64). Search Hugging Face from Settings (trending vision models, or any GGUF repo), pick the quantisation and vision projector (mmproj), and download, with a warning when it won't fit in the device's RAM; an optional Hugging Face token unlocks gated models. Or import your own GGUF + mmproj files. |
 
 Each provider has a ↻ button that loads its model list, plus a *Test connection* button. API keys and tokens are stored in EncryptedSharedPreferences (Android Keystore).
 
