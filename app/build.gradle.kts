@@ -139,5 +139,6 @@ tasks.withType<Test>().configureEach {
     inputs.files(buildHostCasio)
     // A native library can be loaded by one classloader per JVM, and Robolectric uses one per test class.
     forkEvery = 1
+    System.getProperty("sdocx")?.let { systemProperty("sdocx", it) }
     systemProperty("java.library.path", hostNativeDir.get().asFile.path)
 }
