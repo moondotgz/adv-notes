@@ -300,6 +300,23 @@ class UiSnapshots {
         snap("24_model_picker_search")
     }
 
+    @Test fun marketplace() = FakeMarketplace().use { m ->
+        com.advnotes.app.tools.market.Marketplace.baseUrl = m.baseUrl
+        try {
+            rule.onNodeWithContentDescriptionCompat("Settings")
+            rule.onNodeWithText("Browse marketplace").performScrollTo().performClick()
+            rule.waitUntil(10_000) { rule.onAllNodesWithText("Periodic table", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+            snap("25_marketplace")
+            rule.onAllNodesWithText("Install")[1].performClick()
+            rule.waitUntil(10_000) { rule.onAllNodesWithText("Installed", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+            snap("26_marketplace_installed")
+            assertTrue(AdvNotesApp.instance.tools.tools.value.any { it.id == "periodic" })
+            AdvNotesApp.instance.tools.uninstall("periodic")
+        } finally {
+            com.advnotes.app.tools.market.Marketplace.baseUrl = com.advnotes.app.tools.market.Marketplace.DEFAULT_BASE
+        }
+    }
+
     private fun androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>.onNodeWithContentDescriptionCompat(desc: String) {
         onNode(androidx.compose.ui.test.hasContentDescription(desc)).performClick()
         waitForIdle()

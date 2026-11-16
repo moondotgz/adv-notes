@@ -74,6 +74,8 @@ class WebTool(
                 val files = ctx.filesDir
                 val loader = WebViewAssetLoader.Builder()
                     .addPathHandler("/assets/", ToolFiles.Assets(ctx))
+                    // downloaded tools load the API shim as ../lib/advnotes.js, like bundled ones
+                    .addPathHandler("/installed/lib/", ToolFiles.Assets(ctx, "tools/lib/"))
                     .addPathHandler("/installed/", ToolFiles.Directory(File(files, "tools").apply { mkdirs() }))
                     .addPathHandler("/tooldata/", ToolFiles.Directory(File(files, "tooldata").apply { mkdirs() }))
                     .build()

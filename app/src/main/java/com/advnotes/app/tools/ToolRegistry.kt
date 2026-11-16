@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.advnotes.app.data.AppJson
+import com.advnotes.app.tools.market.Marketplace
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -86,18 +87,40 @@ class ToolRegistry(private val context: Context, private val builtins: List<Note
             val root = if (File(staging, "manifest.json").exists()) staging
             else staging.listFiles().orEmpty().singleOrNull { it.isDirectory && File(it, "manifest.json").exists() }
                 ?: throw IllegalArgumentException("No manifest.json found in the zip")
-            val m = AppJson.decodeFromString(WebToolManifest.serializer(), File(root, "manifest.json").readText())
-            require(Regex("[a-z0-9][a-z0-9_-]{0,40}").matches(m.id)) { "Invalid tool id \"${m.id}\" (use lowercase letters, digits, - and _)" }
-            require(builtins.none { it.id == m.id }) { "\"${m.id}\" is a built-in tool id" }
-            require(File(root, m.entry).exists()) { "Entry page ${m.entry} is missing" }
-            val dest = File(installedDir, m.id)
-            dest.deleteRecursively()
-            root.copyRecursively(dest, overwrite = true)
-            withContext(Dispatchers.Main) { reload() }
-            m
+            installDir(root)
         } finally {
             staging.deleteRecursively()
         }
+    }
+
+    /** Downloads and installs (or updates) a tool from the marketplace. */
+    suspend fun install(e: Marketplace.Entry, progress: (Long, Long) -> Unit = { _, _ -> }): WebToolManifest {
+        val staging = File(context.cacheDir, "tool-market-${System.nanoTime()}")
+        try {
+            Marketplace.download(e, staging, progress)
+            return withContext(Dispatchers.IO) { installDir(staging, expectId = e.id) }
+        } finally {
+            withContext(Dispatchers.IO) { staging.deleteRecursively() }
+        }
+    }
+
+    /** Installed (downloaded) version of a tool, or null. */
+    fun installedVersion(id: String): String? =
+        (_tools.value.firstOrNull { it.id == id } as? WebTool)?.takeIf { it.installed }?.manifest?.version
+
+    private suspend fun installDir(root: File, expectId: String? = null): WebToolManifest {
+        val m = AppJson.decodeFromString(WebToolManifest.serializer(), File(root, "manifest.json").readText())
+        require(Regex("[a-z0-9][a-z0-9_-]{0,40}").matches(m.id)) { "Invalid tool id \"${m.id}\" (use lowercase letters, digits, - and _)" }
+        require(expectId == null || expectId == m.id) { "Tool id mismatch: expected $expectId, got ${m.id}" }
+        require(builtins.none { it.id == m.id }) { "\"${m.id}\" is a built-in tool id" }
+        require(File(root, m.entry).exists()) { "Entry page ${m.entry} is missing" }
+        withContext(Dispatchers.IO) {
+            val dest = File(installedDir, m.id)
+            dest.deleteRecursively()
+            root.copyRecursively(dest, overwrite = true)
+        }
+        withContext(Dispatchers.Main) { reload() }
+        return m
     }
 
     fun uninstall(id: String) {

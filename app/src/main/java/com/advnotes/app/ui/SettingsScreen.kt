@@ -536,10 +536,12 @@ private fun ToolsSection() {
             message = try { "Installed " + app.tools.install(uri).name } catch (e: Exception) { "Couldn't install: ${e.message}" }
         }
     }
+    var market by remember { mutableStateOf(false) }
+    if (market) com.advnotes.app.tools.market.MarketplaceDialog(onDismiss = { market = false })
     Section("Tools") {
         Text(
-            "Tools open in the side panel next to a notebook (the ▦ button in the editor). Web tools are folders with a " +
-                "manifest.json and HTML/JS, packed as a .zip: see docs/TOOLS.md in the project to build or port one.",
+            "Tools open in the side panel next to a notebook (the ▦ button in the editor). Get more from the marketplace, " +
+                "or install your own .zip: see docs/TOOLS.md to build or port one.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         tools.forEach { t ->
@@ -562,7 +564,10 @@ private fun ToolsSection() {
                 }
             }
         }
-        OutlinedButton(onClick = { pick.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }) { Text("Install tool from .zip…") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { market = true }) { Text("Browse marketplace") }
+            OutlinedButton(onClick = { pick.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }) { Text("Install from .zip…") }
+        }
         message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
 }

@@ -1,11 +1,11 @@
 # Building tools for Adv Notes
 
-Tools are small apps that open in a side panel next to a notebook: the calculator, the PDF reader and the AI chat are all tools. There are two kinds:
+Tools are small apps that open in a side panel next to a notebook: the calculator, the PDF reader and the AI chat are all tools. Web tools are published in the [tool marketplace](https://github.com/moondotgz/adv-notes-tools), which the app browses under **Tools → Get more tools**; see that repository's README to publish one. There are two kinds:
 
 | | Web tool | Native tool |
 |---|---|---|
 | Written in | HTML / CSS / JavaScript | Kotlin + Jetpack Compose |
-| Ships as | a `.zip` the user installs (Settings → Tools), or a folder in `app/src/main/assets/tools/` | code in the app |
+| Ships as | the marketplace, a `.zip` the user installs (Settings → Tools), or a folder in `app/src/main/assets/tools/` | code in the app |
 | Good for | porting existing web apps, quick tools | deep integration, native libraries (e.g. the C++ calculator engine) |
 
 ## Web tools

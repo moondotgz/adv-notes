@@ -35,9 +35,9 @@ object ToolFiles {
     }
 
     /** Files bundled in the APK under assets/<path>. */
-    class Assets(private val context: Context) : WebViewAssetLoader.PathHandler {
+    class Assets(private val context: Context, private val prefix: String = "") : WebViewAssetLoader.PathHandler {
         override fun handle(path: String): WebResourceResponse? =
-            response(path, runCatching { context.assets.open(path.removePrefix("/")) }.getOrNull())
+            response(path, runCatching { context.assets.open(prefix + path.removePrefix("/")) }.getOrNull())
     }
 
     /** Files under [root] (installed tools, tool data); refuses paths escaping it. */

@@ -1,5 +1,10 @@
 package com.advnotes.app.tools
 
+import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -90,11 +95,13 @@ fun ToolPanel(
 
 @Composable
 private fun ToolPicker(tools: List<NotebookTool>, onOpen: (String) -> Unit) {
+    var market by remember { mutableStateOf(false) }
+    if (market) com.advnotes.app.tools.market.MarketplaceDialog(onDismiss = { market = false }, onOpen = onOpen)
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             Text("Tools", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp))
             Text(
-                "Little apps that sit next to your notes. More can be installed in Settings → Tools.",
+                "Little apps that sit next to your notes.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
@@ -106,6 +113,14 @@ private fun ToolPicker(tools: List<NotebookTool>, onOpen: (String) -> Unit) {
                 supportingContent = { Text(t.description, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                 leadingContent = { Icon(t.icon, null) },
                 modifier = Modifier.clickable { onOpen(t.id) },
+            )
+        }
+        item {
+            ListItem(
+                headlineContent = { Text("Get more tools") },
+                supportingContent = { Text("PDF reader and more from the marketplace") },
+                leadingContent = { Icon(androidx.compose.material.icons.Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary) },
+                modifier = Modifier.clickable { market = true },
             )
         }
     }

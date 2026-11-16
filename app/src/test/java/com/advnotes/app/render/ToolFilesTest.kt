@@ -14,14 +14,14 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ToolFilesTest {
-    @Test fun servesBundledToolWithJavaScriptTypes() {
+    @Test fun servesAssetsWithJavaScriptTypes() {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         val h = ToolFiles.Assets(ctx)
-        assertEquals("text/javascript", h.handle("tools/pdfreader/pdfjs/pdf.min.js")!!.mimeType)
-        assertEquals("text/javascript", h.handle("tools/pdfreader/pdfjs/pdf.worker.min.js")!!.mimeType)
-        assertEquals("text/html", h.handle("tools/pdfreader/index.html")!!.mimeType)
         assertEquals("text/javascript", h.handle("tools/lib/advnotes.js")!!.mimeType)
-        assertNull(h.handle("tools/pdfreader/missing.js"))
+        assertNull(h.handle("tools/lib/missing.js"))
+        // downloaded tools load ../lib/advnotes.js from /installed/lib/
+        assertEquals("text/javascript", ToolFiles.Assets(ctx, "tools/lib/").handle("advnotes.js")!!.mimeType)
+        assertEquals("text/html", ToolFiles.mimeFor("tools/x/index.html"))
         assertEquals("application/wasm", ToolFiles.mimeFor("a/b.WASM"))
         assertEquals("text/javascript", ToolFiles.mimeFor("x.mjs"))
     }
