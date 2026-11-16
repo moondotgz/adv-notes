@@ -24,10 +24,6 @@ struct Session {
     int n_batch = 512;
 };
 
-void log_cb(ggml_log_level level, const char * text, void *) {
-    if (level >= GGML_LOG_LEVEL_WARN) __android_log_print(ANDROID_LOG_WARN, TAG, "%s", text);
-}
-
 std::string jstr(JNIEnv * env, jstring s) {
     const char * c = env->GetStringUTFChars(s, nullptr);
     std::string out(c);
@@ -65,6 +61,30 @@ jstring to_jstring(JNIEnv * env, const std::string & s) {
         }
     }
     return env->NewString(reinterpret_cast<const jchar *>(u.data()), (jsize) u.size());
+}
+
+// Native logs are also forwarded to LlamaBridge.onNativeLog so the app can show them.
+JavaVM *  g_vm = nullptr;
+jclass    g_bridge = nullptr;
+jmethodID g_log = nullptr;
+int       g_last_level = GGML_LOG_LEVEL_INFO;
+
+void log_cb(ggml_log_level level, const char * text, void *) {
+    // CONT continues the previous message, so it inherits that message's level.
+    if (level == GGML_LOG_LEVEL_CONT) level = (ggml_log_level) g_last_level; else g_last_level = level;
+    if (level >= GGML_LOG_LEVEL_WARN) __android_log_print(ANDROID_LOG_WARN, TAG, "%s", text);
+    if (level == GGML_LOG_LEVEL_DEBUG || !g_vm || !g_log) return;
+    JNIEnv * env = nullptr;
+    bool attached = false;
+    if (g_vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) return;
+        attached = true;
+    }
+    jstring js = to_jstring(env, text);
+    env->CallStaticVoidMethod(g_bridge, g_log, (jint) level, js);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(js);
+    if (attached) g_vm->DetachCurrentThread();
 }
 
 // Number of bytes at the end of `s` that form an incomplete UTF-8 sequence.
@@ -105,9 +125,14 @@ Java_com_advnotes_app_ai_LlamaBridge_systemInfo(JNIEnv * env, jobject) {
 }
 
 JNIEXPORT jlong JNICALL
-Java_com_advnotes_app_ai_LlamaBridge_load(JNIEnv * env, jobject, jstring jmodel, jstring jmmproj, jint n_ctx, jint n_threads) {
+Java_com_advnotes_app_ai_LlamaBridge_load(JNIEnv * env, jobject self, jstring jmodel, jstring jmmproj, jint n_ctx, jint n_threads) {
     static bool init = false;
     if (!init) {
+        env->GetJavaVM(&g_vm);
+        jclass c = env->GetObjectClass(self);
+        g_bridge = reinterpret_cast<jclass>(env->NewGlobalRef(c));
+        g_log = env->GetStaticMethodID(c, "onNativeLog", "(ILjava/lang/String;)V");
+        if (env->ExceptionCheck()) { env->ExceptionClear(); g_log = nullptr; }
         llama_log_set(log_cb, nullptr);
         mtmd_helper_log_set(log_cb, nullptr);
         llama_backend_init();

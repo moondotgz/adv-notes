@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -187,6 +188,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         "and only sent to the provider you choose.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                UpdateCheck()
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -394,6 +396,7 @@ private fun LocalModelsConfig() {
     Spacer(Modifier.height(8.dp))
     ImportModel()
     Spacer(Modifier.height(8.dp))
+    LocalLogs()
     Text("CPU threads: ${s.localThreads}")
     Slider(
         s.localThreads.toFloat(), { v -> app.settings.update { it.copy(localThreads = v.toInt()) } },
@@ -724,4 +727,82 @@ private fun ModelFilesDialog(repo: String, onDismiss: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+@Composable
+private fun UpdateCheck() {
+    val app = AdvNotesApp.instance
+    val s by app.settings.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var msg by remember { mutableStateOf<String?>(null) }
+    var found by remember { mutableStateOf<com.advnotes.app.update.Update?>(null) }
+    SwitchRow("Check for updates", "Looks for a new release on GitHub when the library opens.", s.checkUpdates) { v ->
+        app.settings.update { it.copy(checkUpdates = v) }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(enabled = !busy, onClick = {
+            busy = true; msg = null
+            scope.launch {
+                try {
+                    val u = com.advnotes.app.update.Updater.check()
+                    if (u == null) msg = "You're up to date." else found = u
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    msg = "Couldn't check: ${e.message}"
+                }
+                busy = false
+            }
+        }) { Text("Check now") }
+        msg?.let { Spacer(Modifier.width(12.dp)); Text(it, style = MaterialTheme.typography.bodySmall) }
+    }
+    found?.let { UpdateDialog(it) { found = null } }
+}
+
+/** Test-load button plus a viewer for llama.cpp's output, to check that a model really loads. */
+@Composable
+private fun LocalLogs() {
+    val app = AdvNotesApp.instance
+    val scope = rememberCoroutineScope()
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val version by com.advnotes.app.ai.LlamaLog.version.collectAsState()
+    var busy by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<String?>(null) }
+    var show by remember { mutableStateOf(false) }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(enabled = !busy, onClick = {
+            busy = true; result = null
+            scope.launch { result = app.local.testLoad(); busy = false }
+        }) { Text("Test load") }
+        OutlinedButton(onClick = { show = true }) { Text("View logs") }
+        if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+    }
+    result?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    if (show) {
+        val text = remember(version) { com.advnotes.app.ai.LlamaLog.text() }
+        val scroll = rememberScrollState()
+        LaunchedEffect(version) { scroll.scrollTo(scroll.maxValue) }
+        AlertDialog(
+            onDismissRequest = { show = false },
+            title = { Text("On-device model log") },
+            text = {
+                Box(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(scroll)) {
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Text(
+                            text.ifBlank { "Nothing logged yet. Tap Test load, or run the solver with a local model." },
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 11.sp),
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { show = false }) { Text("Close") } },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(text)) }) { Text("Copy") }
+                    TextButton(onClick = { com.advnotes.app.ai.LlamaLog.clear() }) { Text("Clear") }
+                }
+            },
+        )
+    }
 }

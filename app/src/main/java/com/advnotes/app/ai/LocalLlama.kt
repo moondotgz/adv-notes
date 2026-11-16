@@ -30,6 +30,10 @@ object LlamaBridge {
     }
     val available: Boolean get() = forceAvailable || loaded
 
+    /** Called from native code with llama.cpp's log output. */
+    @JvmStatic
+    fun onNativeLog(level: Int, text: String) = LlamaLog.appendRaw(text)
+
     external fun load(modelPath: String, mmprojPath: String, nCtx: Int, nThreads: Int): Long
     external fun generate(handle: Long, prompt: String, image: ByteArray?, maxTokens: Int, cb: TokenCallback): String
     external fun free(handle: Long)
@@ -128,11 +132,8 @@ class LocalLlama(private val context: Context, private val settings: SettingsSto
         return lock.withLock {
             withContext(Dispatchers.Default) {
                 if (loadedName != m.name) {
-                    unloadLocked()
                     onText("Loading model…")
-                    handle = LlamaBridge.load(m.model.path, m.mmproj.path, 4096, settings.state.value.localThreads)
-                    if (handle == 0L) throw AiException("Couldn't load the model (out of memory or unsupported file).")
-                    loadedName = m.name
+                    ensureLoadedLocked(m)
                     onText("")
                 }
                 val ctx = currentCoroutineContext()
@@ -144,13 +145,47 @@ class LocalLlama(private val context: Context, private val settings: SettingsSto
                     if (turns.size > 1) for (m in turns.dropLast(1)) append(if (m.fromUser) "User: " else "Assistant: ").append(m.text).append("\n")
                     append(turns.last().text)
                 }
-                LlamaBridge.generate(handle, prompt, req.lastImage, 1500, object : LlamaBridge.TokenCallback {
+                LlamaLog.event("generating (prompt ${prompt.length} chars, image ${req.lastImage?.size ?: 0} bytes)")
+                val t0 = System.nanoTime()
+                val out = LlamaBridge.generate(handle, prompt, req.lastImage, 1500, object : LlamaBridge.TokenCallback {
                     override fun onToken(piece: String): Boolean {
                         sb.append(piece)
                         onText(sb.toString())
                         return ctx.isActive
                     }
                 })
+                LlamaLog.event("generated ${out.length} chars in %.1f s".format((System.nanoTime() - t0) / 1e9))
+                out
+            }
+        }
+    }
+
+    /** Loads [m] if it isn't already, logging what happens. Call with [lock] held. */
+    private fun ensureLoadedLocked(m: LocalModel) {
+        if (loadedName == m.name && handle != 0L) return
+        unloadLocked()
+        val threads = settings.state.value.localThreads
+        LlamaLog.event("loading ${m.name}: model %.2f GB, projector %.0f MB, $threads threads".format(m.model.length() / 1e9, m.mmproj.length() / 1e6))
+        LlamaLog.event("system: " + runCatching { LlamaBridge.systemInfo().trim() }.getOrDefault("unknown"))
+        val t0 = System.nanoTime()
+        handle = LlamaBridge.load(m.model.path, m.mmproj.path, 4096, threads)
+        val secs = (System.nanoTime() - t0) / 1e9
+        if (handle == 0L) {
+            LlamaLog.event("FAILED to load ${m.name} after %.1f s (see the lines above; usually out of memory or an unsupported file)".format(secs))
+            throw AiException("Couldn't load the model (out of memory or unsupported file). Check Settings → View logs.")
+        }
+        loadedName = m.name
+        LlamaLog.event("loaded ${m.name} OK in %.1f s".format(secs))
+    }
+
+    /** Loads the selected model without running anything, for the "Test load" button. */
+    suspend fun testLoad(): String {
+        if (!LlamaBridge.available) return "This build doesn't include the on-device runner."
+        val name = settings.state.value.localModel ?: return "Pick a local model first."
+        val m = models().firstOrNull { it.name == name && it.ready } ?: return "Local model \"$name\" isn't fully downloaded."
+        return lock.withLock {
+            withContext(Dispatchers.Default) {
+                try { ensureLoadedLocked(m); "✓ ${m.name} loaded" } catch (e: AiException) { "✗ ${e.message}" }
             }
         }
     }
