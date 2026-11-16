@@ -42,14 +42,23 @@ android {
         }
     }
 
+    // Release key from the environment (set in CI from repository secrets); falls back to the debug key.
+    val releaseKeystore = System.getenv("ADVNOTES_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (releaseKeystore != null) create("release") {
+            storeFile = releaseKeystore
+            storePassword = System.getenv("ADVNOTES_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("ADVNOTES_KEY_ALIAS")
+            keyPassword = System.getenv("ADVNOTES_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signed with the debug key so `assembleRelease` produces an installable APK.
-            // Replace with your own signing config before publishing.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
