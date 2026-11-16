@@ -35,6 +35,8 @@ fun UpdateDialog(update: Update, onDismiss: () -> Unit) {
     var progress by remember { mutableStateOf<Float?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var job by remember { mutableStateOf<Job?>(null) }
+    // Already downloaded (e.g. on an earlier try that stopped at the "allow installs" screen): install straight away.
+    val downloaded = remember(update) { Updater.cachedApk(ctx, update) != null }
 
     fun start() {
         error = null; progress = 0f
@@ -43,7 +45,7 @@ fun UpdateDialog(update: Update, onDismiss: () -> Unit) {
                 val apk = Updater.download(ctx, update) { progress = it }
                 progress = null
                 if (Updater.install(ctx, apk)) onDismiss()
-                else Toast.makeText(ctx, "Allow installs from Adv Notes, then tap Update again", Toast.LENGTH_LONG).show()
+                else Toast.makeText(ctx, "Allow installs from Adv Notes, then tap Install again. The download is kept.", Toast.LENGTH_LONG).show()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -58,13 +60,14 @@ fun UpdateDialog(update: Update, onDismiss: () -> Unit) {
         text = {
             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                 Text("Adv Notes ${update.version} is out (you have ${BuildConfig.VERSION_NAME}).")
-                if (update.size > 0) Text("%.1f MB".format(update.size / 1_048_576.0), style = MaterialTheme.typography.bodySmall)
+                if (downloaded) Text("Already downloaded, ready to install.", style = MaterialTheme.typography.bodySmall)
+                else if (update.size > 0) Text("%.1f MB".format(update.size / 1_048_576.0), style = MaterialTheme.typography.bodySmall)
                 if (update.notes.isNotBlank()) Text(update.notes.trim().take(800), style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth())
                 progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
-        confirmButton = { TextButton(onClick = ::start, enabled = progress == null) { Text(if (error != null) "Retry" else "Update") } },
+        confirmButton = { TextButton(onClick = ::start, enabled = progress == null) { Text(if (error != null) "Retry" else if (downloaded) "Install" else "Update") } },
         dismissButton = {
             TextButton(onClick = { job?.cancel(); progress = null; onDismiss() }) { Text(if (progress != null) "Cancel" else "Later") }
         },

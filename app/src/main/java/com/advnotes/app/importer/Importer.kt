@@ -56,7 +56,11 @@ class Importer(private val context: Context, private val repo: NotebookRepositor
         for (g in groups) {
             try { done += import(g, pdf) }
             catch (e: kotlinx.coroutines.CancellationException) { throw e }
-            catch (e: Exception) { errors += (displayName(g[0]) ?: "A file") + ": " + (e.message ?: "import failed") }
+            catch (e: Exception) {
+                // Name the MIME type on "unsupported" so an unexpected share type is easy to report.
+                val type = if (e.message?.startsWith("Unsupported") == true) context.contentResolver.getType(g[0])?.let { " (shared as $it)" }.orEmpty() else ""
+                errors += (displayName(g[0]) ?: "A file") + ": " + (e.message ?: "import failed") + type
+            }
         }
         return SharedResult(done, errors)
     }

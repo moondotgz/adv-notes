@@ -62,14 +62,34 @@ object Updater {
     /** Like [check] but returns null on any failure (for the silent launch-time check). */
     suspend fun checkQuietly(): Update? = try { check() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
 
+    private fun updatesDir(context: Context) = File(context.cacheDir, "updates").apply { mkdirs() }
+
+    /**
+     * The APK of [u] if it was already downloaded completely, so a retry (for example after the user came back
+     * from the "allow installs" settings screen) installs at once instead of downloading again. Downloads go to a
+     * .part file first, so anything named .apk is whole; it is also checked to really be this version.
+     */
+    fun cachedApk(context: Context, u: Update): File? {
+        val f = File(updatesDir(context), "adv-notes-${u.version}.apk")
+        if (!f.isFile || f.length() == 0L) return null
+        if (u.size > 0 && f.length() != u.size) return null
+        val info = runCatching { context.packageManager.getPackageArchiveInfo(f.path, 0) }.getOrNull()
+        return if (info != null && info.versionName == u.version) f else null
+    }
+
     suspend fun download(context: Context, u: Update, onProgress: (Float) -> Unit): File = withContext(Dispatchers.IO) {
-        val dir = File(context.cacheDir, "updates").apply { deleteRecursively(); mkdirs() }
+        cachedApk(context, u)?.let { onProgress(1f); return@withContext it }
+        val dir = updatesDir(context)
         val out = File(dir, "adv-notes-${u.version}.apk")
+        // drop older downloads and any unfinished attempt
+        dir.listFiles()?.forEach { if (it != out) it.delete() }
+        out.delete()
+        val part = File(dir, out.name + ".part")
         Http.client.newCall(Request.Builder().url(u.apkUrl).build()).await().use { r ->
             if (!r.isSuccessful) throw IOException("Download failed (${r.code})")
             val body = r.body ?: throw IOException("Empty download")
             val total = body.contentLength().takeIf { it > 0 } ?: u.size
-            out.outputStream().use { sink ->
+            part.outputStream().use { sink ->
                 body.byteStream().use { src ->
                     val buf = ByteArray(64 * 1024)
                     var done = 0L
@@ -84,6 +104,7 @@ object Updater {
                 }
             }
         }
+        if (!part.renameTo(out)) throw IOException("Couldn't save the download")
         out
     }
 

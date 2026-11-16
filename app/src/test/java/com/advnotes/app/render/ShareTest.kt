@@ -53,6 +53,16 @@ class ShareTest {
         assertTrue(r.notebooks[0].notebook.id != r.notebooks[1].notebook.id)
     }
 
+    @Test fun aSharedSamsungNoteBecomesItsOwnNotebookWithItsStrokes() = runBlocking {
+        val f = File.createTempFile("share", ".sdocx")
+        javaClass.getResourceAsStream("/import/sample1.sdocx")!!.use { i -> f.outputStream().use { i.copyTo(it) } }
+        val r = AdvNotesApp.instance.importer.importShared(listOf(Uri.fromFile(f), Uri.fromFile(xopp(".xopp"))))
+        assertEquals(2, r.notebooks.size)
+        assertTrue(r.errors.isEmpty())
+        val samsung = r.notebooks.first { it.format == com.advnotes.app.importer.ImportFormat.SAMSUNG_NOTES }
+        assertTrue(samsung.notebook.pages.any { it.strokes.isNotEmpty() })
+    }
+
     @Test fun oneBadFileDoesNotStopTheRest() = runBlocking {
         val junk = File.createTempFile("share", ".bin").apply { writeText("definitely not a note") }
         val r = AdvNotesApp.instance.importer.importShared(listOf(Uri.fromFile(junk), Uri.fromFile(xopp(".xopp"))))

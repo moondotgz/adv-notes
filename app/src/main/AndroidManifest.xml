@@ -30,6 +30,14 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/pdf" />
                 <data android:mimeType="image/*" />
+                <!-- Samsung Notes (.sdocx) has no registered type: it is shared as a generic binary or zip, and the
+                     importer recognises it by content. The extra Samsung-style names cover newer versions. -->
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/vnd.samsung.sdocx" />
+                <data android:mimeType="application/x-sdocx" />
+                <data android:mimeType="application/sdocx" />
             </intent-filter>
         </activity>
 
