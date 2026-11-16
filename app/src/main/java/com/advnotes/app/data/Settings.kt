@@ -62,6 +62,10 @@ data class AppSettings(
     val pageNav: String = "ARROWS",
     /** Look for a newer GitHub release when the library opens. */
     val checkUpdates: Boolean = true,
+    /** Paper style for pages added to an imported PDF (the PDF's own pages keep their look). */
+    val pdfPaper: String = "NARROW_GRID",
+    /** Import PDFs without allowing new pages to be added. */
+    val pdfLockPages: Boolean = false,
 )
 
 /**
@@ -116,6 +120,8 @@ class SettingsStore(context: Context) {
         panelSide = prefs.getString("panelSide", null) ?: "RIGHT",
         pageNav = prefs.getString("pageNav", null) ?: "ARROWS",
         checkUpdates = prefs.getBoolean("checkUpdates", true),
+        pdfPaper = prefs.getString("pdfPaper", null) ?: "NARROW_GRID",
+        pdfLockPages = prefs.getBoolean("pdfLockPages", false),
     )
 
     fun update(block: (AppSettings) -> AppSettings) {
@@ -136,6 +142,8 @@ class SettingsStore(context: Context) {
             .putString("panelSide", s.panelSide)
             .putString("pageNav", s.pageNav)
             .putBoolean("checkUpdates", s.checkUpdates)
+            .putString("pdfPaper", s.pdfPaper)
+            .putBoolean("pdfLockPages", s.pdfLockPages)
             .apply()
         _state.value = s
     }

@@ -259,12 +259,16 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                     if (nav == "ARROWS") IconButton(onClick = { vm.goTo(ui.pageIndex + 1) }, enabled = nb != null && ui.pageIndex < nb.pages.size - 1) {
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next page")
                     }
-                    if (nav == "ARROWS") IconButton(onClick = vm::addPage) { Icon(Icons.AutoMirrored.Filled.NoteAdd, "Add page") }
+                    if (nav == "ARROWS" && nb?.lockPages != true) IconButton(onClick = vm::addPage) { Icon(Icons.AutoMirrored.Filled.NoteAdd, "Add page") }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
                         DropdownMenu(menu, { menu = false }) {
                             DropdownMenuItem(text = { Text("Paper style…") }, onClick = { menu = false; showPaper = true })
                             DropdownMenuItem(text = { Text("Page navigation…") }, onClick = { menu = false; showNav = true })
+                            DropdownMenuItem(
+                                text = { Text(if (nb?.lockPages == true) "Allow adding pages" else "Don't allow adding pages") },
+                                onClick = { menu = false; vm.setLockPages(nb?.lockPages != true) },
+                            )
                             DropdownMenuItem(text = { Text("Rename…") }, onClick = { menu = false; showRename = true })
                             DropdownMenuItem(text = { Text("Insert pages from file…") }, onClick = { menu = false; insertLauncher.launch(arrayOf("*/*")) })
                             DropdownMenuItem(text = { Text("Fit page to screen") }, onClick = { menu = false; canvas?.fitPage() })
@@ -337,7 +341,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                     val boxW = constraints.maxWidth
                     if (slot > 0 && slotPage == null) {
                         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer), contentAlignment = Alignment.Center) {
-                            OutlinedButton(onClick = vm::appendPage) {
+                            if (nb?.lockPages != true) OutlinedButton(onClick = vm::appendPage) {
                                 Icon(Icons.AutoMirrored.Filled.NoteAdd, null); Spacer(Modifier.width(8.dp)); Text("Add page")
                             }
                         }

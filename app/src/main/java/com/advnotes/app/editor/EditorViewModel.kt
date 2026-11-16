@@ -115,6 +115,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun addPage() {
         _ui.update { s ->
             val nb = s.notebook ?: return@update s
+            if (nb.lockPages) return@update s
             val pages = nb.pages.toMutableList().apply { add(s.pageIndex + 1, Page()) }
             s.copy(notebook = nb.copy(pages = pages), pageIndex = s.pageIndex + 1)
         }
@@ -131,6 +132,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         val base = s.pageIndex - s.pageIndex % step
         val target = base + dir * step
         if (target < 0) return
+        if (target >= nb.pages.size && nb.lockPages) return
         if (target >= nb.pages.size) {
             val extra = List(target - nb.pages.size + 1) { Page() }
             _ui.update { it.copy(notebook = nb.copy(pages = nb.pages + extra)) }
@@ -141,7 +143,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Appends a blank page at the end without moving. */
     fun appendPage() {
-        _ui.update { s -> val nb = s.notebook ?: return@update s; s.copy(notebook = nb.copy(pages = nb.pages + Page())) }
+        _ui.update { s ->
+            val nb = s.notebook ?: return@update s
+            if (nb.lockPages) s else s.copy(notebook = nb.copy(pages = nb.pages + Page()))
+        }
         scheduleSave()
     }
 
@@ -180,6 +185,11 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             if (wholeNotebook) s.copy(notebook = nb.copy(paper = style, pages = nb.pages.map { it.copy(paper = null) }))
             else s.copy(notebook = nb.copy(pages = nb.pages.mapIndexed { i, p -> if (i == s.pageIndex) p.copy(paper = style) else p }))
         }
+        scheduleSave()
+    }
+
+    fun setLockPages(locked: Boolean) {
+        _ui.update { s -> s.copy(notebook = s.notebook?.copy(lockPages = locked)) }
         scheduleSave()
     }
 

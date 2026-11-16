@@ -89,7 +89,7 @@ import java.util.Date
 fun LibraryScreen(
     onOpen: (String) -> Unit,
     onSettings: () -> Unit,
-    sharedPdf: android.net.Uri? = null,
+    sharedFiles: List<android.net.Uri> = emptyList(),
     onShareConsumed: () -> Unit = {},
 ) {
     val app = AdvNotesApp.instance
@@ -104,39 +104,47 @@ fun LibraryScreen(
     var deleting by remember { mutableStateOf<NotebookSummary?>(null) }
 
     var importing by remember { mutableStateOf(false) }
-    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()
-    ) { uris ->
-        if (uris.isNotEmpty()) scope.launch {
-            importing = true
-            try {
-                val r = app.importer.import(uris)
-                importing = false
-                r.warnings.firstOrNull()?.let { scope.launch { snackbar.showSnackbar(it) } }
-                onOpen(r.notebook.id)
-            } catch (e: Exception) {
-                importing = false
-                snackbar.showSnackbar(e.message ?: "Import failed")
+    // PDFs wait here for "how should new pages look?" before they are imported.
+    class PendingImport(val uris: List<android.net.Uri>, val done: () -> Unit)
+    var pendingImport by remember { mutableStateOf<PendingImport?>(null) }
+
+    suspend fun runImport(uris: List<android.net.Uri>, pdf: com.advnotes.app.importer.PdfImportOptions?, done: () -> Unit) {
+        importing = true
+        try {
+            val result = app.importer.importShared(uris, pdf)
+            done()
+            when {
+                result.notebooks.isEmpty() -> snackbar.showSnackbar(result.errors.firstOrNull() ?: "Import failed")
+                result.notebooks.size == 1 && result.errors.isEmpty() -> {
+                    result.notebooks[0].warnings.firstOrNull()?.let { scope.launch { snackbar.showSnackbar(it) } }
+                    onOpen(result.notebooks[0].notebook.id)
+                }
+                else -> snackbar.showSnackbar(
+                    "Imported ${result.notebooks.size} notebook(s)" + (result.errors.firstOrNull()?.let { " · $it" } ?: "")
+                )
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            done()
+            snackbar.showSnackbar(e.message ?: "Import failed")
+        } finally {
+            importing = false
         }
     }
 
-    LaunchedEffect(sharedPdf) {
-        if (sharedPdf != null) {
-            importing = true
-            try {
-                val result = app.importer.import(listOf(sharedPdf))
-                onShareConsumed()
-                onOpen(result.notebook.id)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                onShareConsumed()
-                snackbar.showSnackbar(e.message ?: "Import failed")
-            } finally {
-                importing = false
-            }
-        }
+    /** Starts an import; asks about the paper for new pages first when any file is a PDF. */
+    suspend fun beginImport(uris: List<android.net.Uri>, done: () -> Unit = {}) {
+        if (uris.any { app.importer.isPdf(it) }) pendingImport = PendingImport(uris, done)
+        else runImport(uris, null, done)
+    }
+
+    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris -> if (uris.isNotEmpty()) scope.launch { beginImport(uris) } }
+
+    LaunchedEffect(sharedFiles) {
+        if (sharedFiles.isNotEmpty()) beginImport(sharedFiles, onShareConsumed)
     }
 
     val driveAuth = rememberDriveAuthLauncher { ok ->
@@ -267,6 +275,41 @@ fun LibraryScreen(
                 app.repo.load(s.id)?.let { app.repo.save(it.copy(title = title, paper = paper, paperColor = color, cover = cover)) }
             }
         }
+    }
+    pendingImport?.let { p ->
+        var paper by remember(p) { mutableStateOf(runCatching { PaperStyle.valueOf(settings.pdfPaper) }.getOrDefault(PaperStyle.NARROW_GRID)) }
+        var addPages by remember(p) { mutableStateOf(!settings.pdfLockPages) }
+        AlertDialog(
+            onDismissRequest = { pendingImport = null; p.done() },
+            title = { Text(if (p.uris.size > 1) "Import PDFs" else "Import PDF") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "The imported pages keep the PDF's own look, so a Samsung Notes export keeps its note style.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("Allow adding new pages", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                if (addPages) "New pages use this Adv Notes paper:" else "The notebook keeps exactly the PDF's pages.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        androidx.compose.material3.Switch(addPages, { addPages = it })
+                    }
+                    if (addPages) PaperPicker(paper) { paper = it }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    app.settings.update { it.copy(pdfPaper = paper.name, pdfLockPages = !addPages) }
+                    pendingImport = null
+                    scope.launch { runImport(p.uris, com.advnotes.app.importer.PdfImportOptions(paper, lockPages = !addPages), p.done) }
+                }) { Text("Import") }
+            },
+            dismissButton = { TextButton(onClick = { pendingImport = null; p.done() }) { Text("Cancel") } },
+        )
     }
     if (importing) {
         AlertDialog(

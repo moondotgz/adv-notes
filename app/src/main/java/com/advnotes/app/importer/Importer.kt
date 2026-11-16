@@ -26,6 +26,9 @@ enum class ImportFormat(val label: String) {
     PDF("PDF"), IMAGE("Image"), SAMSUNG_NOTES("Samsung Notes"), XOURNAL("Xournal++"),
 }
 
+/** How an imported PDF behaves: the Adv Notes paper for pages added later, and whether pages may be added at all. */
+data class PdfImportOptions(val paper: PaperStyle = PaperStyle.PLAIN, val lockPages: Boolean = false)
+
 /**
  * Imports files from other apps into a new notebook. The format is detected from the file's
  * contents, not its name:
@@ -39,9 +42,48 @@ class Importer(private val context: Context, private val repo: NotebookRepositor
 
     data class Result(val notebook: Notebook, val format: ImportFormat, val warnings: List<String>)
 
-    /** Imports into a new notebook and saves it. */
-    suspend fun import(uris: List<Uri>): Result = withContext(Dispatchers.IO) {
-        val r = build(uris, newId())
+    class SharedResult(val notebooks: List<Result>, val errors: List<String>)
+
+    /**
+     * Files shared in from another app: images go together into one notebook, every other file
+     * (PDF, .sdocx, .xopp) into its own. One bad file doesn't stop the rest.
+     */
+    suspend fun importShared(uris: List<Uri>, pdf: PdfImportOptions? = null): SharedResult {
+        val (images, others) = uris.partition { isImage(it) }
+        val groups = (if (images.isNotEmpty()) listOf(images) else emptyList()) + others.map { listOf(it) }
+        val done = ArrayList<Result>()
+        val errors = ArrayList<String>()
+        for (g in groups) {
+            try { done += import(g, pdf) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { errors += (displayName(g[0]) ?: "A file") + ": " + (e.message ?: "import failed") }
+        }
+        return SharedResult(done, errors)
+    }
+
+    private fun header(uri: Uri): ByteArray = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { i -> ByteArray(16).let { b -> b.copyOf(i.read(b).coerceAtLeast(0)) } }
+    }.getOrNull() ?: ByteArray(0)
+
+    /** True when the file starts with %PDF (by content, not by name or MIME type). */
+    suspend fun isPdf(uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        val h = header(uri)
+        h.size >= 4 && h[0] == 0x25.toByte() && h[1] == 0x50.toByte() && h[2] == 0x44.toByte() && h[3] == 0x46.toByte()
+    }
+
+    private suspend fun isImage(uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        val h = header(uri)
+        fun starts(vararg b: Int) = h.size >= b.size && b.indices.all { h[it] == b[it].toByte() }
+        starts(0x89, 0x50, 0x4E, 0x47) || starts(0xFF, 0xD8, 0xFF) || (starts(0x52, 0x49, 0x46, 0x46) && h.size >= 12 && String(h, 8, 4) == "WEBP") ||
+            context.contentResolver.getType(uri)?.startsWith("image/") == true
+    }
+
+    /**
+     * Imports into a new notebook and saves it. For a PDF the pages keep the PDF's own look; [pdf] says which Adv
+     * Notes paper pages added later use and whether pages may be added at all (plain, unlocked when null).
+     */
+    suspend fun import(uris: List<Uri>, pdf: PdfImportOptions? = null): Result = withContext(Dispatchers.IO) {
+        val r = build(uris, newId(), pdf)
         r.copy(notebook = repo.save(r.notebook))
     }
 
@@ -49,7 +91,7 @@ class Importer(private val context: Context, private val repo: NotebookRepositor
      * Converts the files into pages whose assets live in notebook [notebookId] (an existing
      * notebook when inserting pages). Nothing is saved.
      */
-    suspend fun build(uris: List<Uri>, notebookId: String): Result = withContext(Dispatchers.IO) {
+    suspend fun build(uris: List<Uri>, notebookId: String, pdf: PdfImportOptions? = null): Result = withContext(Dispatchers.IO) {
         if (uris.isEmpty()) throw ImportException("No file selected")
         val tmp = uris.map { copyToTemp(it) }
         try {
@@ -59,7 +101,7 @@ class Importer(private val context: Context, private val repo: NotebookRepositor
             if (uris.size > 1 && fmt != ImportFormat.IMAGE) throw ImportException("Pick several files only for images.")
             val id = notebookId
             val res = when (fmt) {
-                ImportFormat.PDF -> importPdf(id, title, first.file)
+                ImportFormat.PDF -> importPdf(id, title, first.file, pdf ?: PdfImportOptions())
                 ImportFormat.IMAGE -> importImages(id, title, tmp.map { it.file })
                 ImportFormat.SAMSUNG_NOTES -> SamsungNotes.import(id, title, first.file)
                 ImportFormat.XOURNAL -> Xournal.import(id, title, openXopp(first.file))
@@ -97,7 +139,7 @@ class Importer(private val context: Context, private val repo: NotebookRepositor
         return if (gz) GZIPInputStream(f.inputStream()).bufferedReader().readText() else f.readText()
     }
 
-    private fun importPdf(id: String, title: String, src: File): Pair<Notebook, List<String>> {
+    private fun importPdf(id: String, title: String, src: File, opts: PdfImportOptions): Pair<Notebook, List<String>> {
         val name = "${newId()}.pdf"
         val dest = repo.assetFile(id, name).apply { parentFile?.mkdirs() }
         src.copyTo(dest, overwrite = true)
@@ -105,10 +147,7 @@ class Importer(private val context: Context, private val repo: NotebookRepositor
             dest.delete(); throw ImportException("This PDF is password-protected.")
         }
         if (sizes.isEmpty()) throw ImportException("The PDF has no pages.")
-        val pages = sizes.mapIndexed { i, (w, h) ->
-            Page(height = PAGE_WIDTH * h / w.coerceAtLeast(1), background = PageBackground(name, i))
-        }
-        return Notebook(id = id, title = title, paper = PaperStyle.PLAIN, pages = pages) to emptyList()
+        return pdfNotebook(id, title, name, sizes, opts.paper, opts.lockPages) to emptyList()
     }
 
     private fun importImages(id: String, title: String, files: List<File>): Pair<Notebook, List<String>> {
@@ -124,6 +163,17 @@ class Importer(private val context: Context, private val repo: NotebookRepositor
     }
 
     companion object {
+        /**
+         * One page per PDF page, each drawn from the PDF. The PDF page is opaque over the paper, so it keeps its own
+         * look (a Samsung Notes export keeps its note style); [newPagePaper] is what pages added later get.
+         */
+        internal fun pdfNotebook(id: String, title: String, assetName: String, sizes: List<Pair<Int, Int>>, newPagePaper: PaperStyle, lockPages: Boolean = false): Notebook {
+            val pages = sizes.mapIndexed { i, (w, h) ->
+                Page(height = PAGE_WIDTH * h / w.coerceAtLeast(1), background = PageBackground(assetName, i))
+            }
+            return Notebook(id = id, title = title, paper = newPagePaper, pages = pages, lockPages = lockPages)
+        }
+
         fun detect(f: File): ImportFormat? {
             val head = ByteArray(16)
             val n = f.inputStream().use { it.read(head) }

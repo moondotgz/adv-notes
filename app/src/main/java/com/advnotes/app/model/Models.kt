@@ -116,6 +116,8 @@ data class Notebook(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val pages: List<Page> = listOf(Page()),
+    /** When true the notebook keeps exactly its pages: no add-page button and swiping past the end adds nothing. */
+    val lockPages: Boolean = false,
 )
 
 /** Lightweight listing info so the library doesn't need to keep every stroke in memory. */
