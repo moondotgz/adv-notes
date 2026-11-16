@@ -121,6 +121,30 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         scheduleSave(); refreshUndoFlags()
     }
 
+    /**
+     * Swipe navigation: moves by [step] pages (2 for spreads), appending blank pages when
+     * swiping forward past the end.
+     */
+    fun swipe(dir: Int, step: Int) {
+        val s = _ui.value
+        val nb = s.notebook ?: return
+        val base = s.pageIndex - s.pageIndex % step
+        val target = base + dir * step
+        if (target < 0) return
+        if (target >= nb.pages.size) {
+            val extra = List(target - nb.pages.size + 1) { Page() }
+            _ui.update { it.copy(notebook = nb.copy(pages = nb.pages + extra)) }
+            scheduleSave()
+        }
+        goTo(target)
+    }
+
+    /** Appends a blank page at the end without moving. */
+    fun appendPage() {
+        _ui.update { s -> val nb = s.notebook ?: return@update s; s.copy(notebook = nb.copy(pages = nb.pages + Page())) }
+        scheduleSave()
+    }
+
     /** Imports PDF/image pages (or another note's pages) after the current page. */
     fun insertPagesFrom(uris: List<android.net.Uri>, onResult: (String?) -> Unit) {
         val nb = _ui.value.notebook ?: return
@@ -212,7 +236,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             val left = (near?.left ?: margin).coerceAtMost(PAGE_WIDTH - 90f * MM)
             Triple(left, top, PAGE_WIDTH - left - margin)
         }
-        commit(p.copy(texts = p.texts + TextBox(x = x, y = y, width = w, text = text, size = 20f, color = 0xFF1F3FBF.toInt())))
+        commit(p.copy(texts = p.texts + TextBox(x = x, y = y, width = w, text = text, size = 20f, color = _tool.value.penColor)))
         _ai.value = AiState.Idle
     }
 
@@ -221,7 +245,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         val p = currentPage ?: return
         if (text.isBlank()) return
         val left = x.coerceIn(8f * MM, PAGE_WIDTH - 60f * MM)
-        commit(p.copy(texts = p.texts + TextBox(x = left, y = y.coerceIn(0f, p.height - 20f), width = PAGE_WIDTH - left - 8f * MM, text = text, size = 20f, color = 0xFF1F3FBF.toInt())))
+        commit(p.copy(texts = p.texts + TextBox(x = left, y = y.coerceIn(0f, p.height - 20f), width = PAGE_WIDTH - left - 8f * MM, text = text, size = 20f, color = _tool.value.penColor)))
     }
 
     // ---- tools side panel ----------------------------------------------------------------

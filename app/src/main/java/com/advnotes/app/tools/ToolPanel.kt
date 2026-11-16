@@ -5,7 +5,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -78,11 +82,17 @@ fun ToolPanel(
                 IconButton(onClick = onHide, Modifier.align(Alignment.CenterEnd)) { Icon(Icons.Default.KeyboardArrowDown, "Hide panel") }
             }
             HorizontalDivider()
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
                 for (id in state.open) {
                     val t = tools.firstOrNull { it.id == id } ?: continue
                     key(id) {
-                        Box(if (state.active == id) Modifier.fillMaxSize() else Modifier.size(0.dp)) {
+                        // Hidden tools keep their full size but are placed off-screen: WebViews shrunk to
+                        // 0dp keep drawing their last frame over whatever is shown instead.
+                        val shown = state.active == id
+                        Box(Modifier.fillMaxSize().layout { m, c ->
+                            val p = m.measure(c)
+                            layout(p.width, p.height) { p.place(if (shown) 0 else 100_000, 0) }
+                        }.then(if (shown) Modifier else Modifier.alpha(0f))) {
                             t.Content(hostFor(t))
                         }
                     }
@@ -97,7 +107,7 @@ fun ToolPanel(
 private fun ToolPicker(tools: List<NotebookTool>, onOpen: (String) -> Unit) {
     var market by remember { mutableStateOf(false) }
     if (market) com.advnotes.app.tools.market.MarketplaceDialog(onDismiss = { market = false }, onOpen = onOpen)
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         item {
             Text("Tools", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp))
             Text(

@@ -16,11 +16,12 @@ android {
         applicationId = "com.advnotes.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
         buildConfigField("boolean", "HAS_LLAMA", buildLlama.toString())
 
-        ndk { abiFilters += listOf("arm64-v8a") }
+        // -PwithX86 adds x86_64 so debug builds run in Waydroid / emulators; releases stay arm64-only.
+        ndk { abiFilters += if (project.hasProperty("withX86")) listOf("arm64-v8a", "x86_64") else listOf("arm64-v8a") }
         externalNativeBuild {
             cmake {
                 arguments += listOf(

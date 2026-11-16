@@ -58,6 +58,8 @@ data class AppSettings(
     val toolbarDock: String = "TOP",
     /** Side of the page the tools panel sits on (tablets): LEFT or RIGHT. */
     val panelSide: String = "RIGHT",
+    /** Page navigation: ARROWS, HORIZONTAL, TWO_PAGE or VERTICAL. */
+    val pageNav: String = "ARROWS",
 )
 
 /**
@@ -110,6 +112,7 @@ class SettingsStore(context: Context) {
         hwEngine = prefs.getString("hwEngine", null) ?: "ON_DEVICE",
         toolbarDock = prefs.getString("toolbarDock", null) ?: "TOP",
         panelSide = prefs.getString("panelSide", null) ?: "RIGHT",
+        pageNav = prefs.getString("pageNav", null) ?: "ARROWS",
     )
 
     fun update(block: (AppSettings) -> AppSettings) {
@@ -128,6 +131,7 @@ class SettingsStore(context: Context) {
             .putString("hwEngine", s.hwEngine)
             .putString("toolbarDock", s.toolbarDock)
             .putString("panelSide", s.panelSide)
+            .putString("pageNav", s.pageNav)
             .apply()
         _state.value = s
     }

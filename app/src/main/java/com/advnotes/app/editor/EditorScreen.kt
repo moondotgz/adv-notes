@@ -40,6 +40,9 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.key
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.MoreVert
@@ -200,6 +203,10 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
     var showOptions by remember { mutableStateOf(false) }
     var showPaper by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
+    var showNav by remember { mutableStateOf(false) }
+    val canvases = remember { arrayOfNulls<InkCanvasView>(2) }
+    var activeSlot by remember { mutableStateOf(0) }
+    var lastSwipe by remember { mutableStateOf(0) }
     var menu by remember { mutableStateOf(false) }
 
     val insertLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -218,6 +225,13 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
 
     val nb = ui.notebook
     val page = nb?.pages?.getOrNull(ui.pageIndex)
+    val nav = settings.pageNav
+    val twoPage = nav == "TWO_PAGE"
+    val step = if (twoPage) 2 else 1
+    val spreadStart = if (twoPage) ui.pageIndex - ui.pageIndex % 2 else ui.pageIndex
+    LaunchedEffect(twoPage) {
+        if (!twoPage && activeSlot != 0) { activeSlot = 0; selInfo = null; canvas = canvases[0] }
+    }
 
     Scaffold(
         topBar = {
@@ -237,18 +251,20 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                     }
                     IconButton(onClick = vm::undo, enabled = ui.canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, "Undo") }
                     IconButton(onClick = vm::redo, enabled = ui.canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, "Redo") }
-                    IconButton(onClick = { vm.goTo(ui.pageIndex - 1) }, enabled = ui.pageIndex > 0) {
+                    if (nav == "ARROWS") IconButton(onClick = { vm.goTo(ui.pageIndex - 1) }, enabled = ui.pageIndex > 0) {
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous page")
                     }
-                    Text("${ui.pageIndex + 1}/${nb?.pages?.size ?: 1}", style = MaterialTheme.typography.labelLarge)
-                    IconButton(onClick = { vm.goTo(ui.pageIndex + 1) }, enabled = nb != null && ui.pageIndex < nb.pages.size - 1) {
+                    Text("${ui.pageIndex + 1}/${nb?.pages?.size ?: 1}", style = MaterialTheme.typography.labelLarge,
+                        modifier = if (nav == "ARROWS") Modifier else Modifier.padding(horizontal = 8.dp))
+                    if (nav == "ARROWS") IconButton(onClick = { vm.goTo(ui.pageIndex + 1) }, enabled = nb != null && ui.pageIndex < nb.pages.size - 1) {
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next page")
                     }
-                    IconButton(onClick = vm::addPage) { Icon(Icons.AutoMirrored.Filled.NoteAdd, "Add page") }
+                    if (nav == "ARROWS") IconButton(onClick = vm::addPage) { Icon(Icons.AutoMirrored.Filled.NoteAdd, "Add page") }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
                         DropdownMenu(menu, { menu = false }) {
                             DropdownMenuItem(text = { Text("Paper style…") }, onClick = { menu = false; showPaper = true })
+                            DropdownMenuItem(text = { Text("Page navigation…") }, onClick = { menu = false; showNav = true })
                             DropdownMenuItem(text = { Text("Rename…") }, onClick = { menu = false; showRename = true })
                             DropdownMenuItem(text = { Text("Insert pages from file…") }, onClick = { menu = false; insertLauncher.launch(arrayOf("*/*")) })
                             DropdownMenuItem(text = { Text("Fit page to screen") }, onClick = { menu = false; canvas?.fitPage() })
@@ -313,61 +329,105 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                 ResizeHandle(outerW, panelLeft) { panelFraction = it(panelFraction) }
             }
             BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
-                val boxW = constraints.maxWidth
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { c ->
-                        InkCanvasView(c).also { v ->
-                            v.listener = object : InkCanvasView.Listener {
-                                override fun onCommit(page: Page) = vm.commit(page)
-                                override fun onSelectionChanged(info: SelectionInfo?) { selInfo = info }
-                                override fun onTextRequest(x: Float, y: Float, existing: TextBox?) { textReq = TextRequest(x, y, existing) }
-                                override fun onStylusSeen() {
-                                    if (app.settings.state.value.fingerMode == com.advnotes.app.data.FingerMode.AUTO) {
-                                        Toast.makeText(c, "Pen detected – fingers now scroll and zoom", Toast.LENGTH_SHORT).show()
+                Row(Modifier.fillMaxSize()) {
+                for (slot in 0 until step) {
+                    val idx = spreadStart + slot
+                    val slotPage = nb?.pages?.getOrNull(idx)
+                    BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                    val boxW = constraints.maxWidth
+                    if (slot > 0 && slotPage == null) {
+                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer), contentAlignment = Alignment.Center) {
+                            OutlinedButton(onClick = vm::appendPage) {
+                                Icon(Icons.AutoMirrored.Filled.NoteAdd, null); Spacer(Modifier.width(8.dp)); Text("Add page")
+                            }
+                        }
+                    } else key(slot) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { c ->
+                            InkCanvasView(c).also { v ->
+                                v.listener = object : InkCanvasView.Listener {
+                                    override fun onCommit(page: Page) = vm.commit(page)
+                                    override fun onSelectionChanged(info: SelectionInfo?) { if (activeSlot == slot) selInfo = info }
+                                    override fun onTextRequest(x: Float, y: Float, existing: TextBox?) { textReq = TextRequest(x, y, existing) }
+                                    override fun onStylusSeen() {
+                                        canvases.forEach { it?.stylusSeen = true }
+                                        if (app.settings.state.value.fingerMode == com.advnotes.app.data.FingerMode.AUTO) {
+                                            Toast.makeText(c, "Pen detected – fingers now scroll and zoom", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    override fun onSwipePage(dir: Int) {
+                                        lastSwipe = dir
+                                        vm.swipe(dir, if (app.settings.state.value.pageNav == "TWO_PAGE") 2 else 1)
+                                    }
+                                    override fun onTouchStart() {
+                                        if (activeSlot != slot) {
+                                            canvases.getOrNull(activeSlot)?.clearSelection()
+                                            selInfo = null
+                                            activeSlot = slot
+                                        }
+                                        canvas = v
+                                        val target = (vm.ui.value.pageIndex.let { if (app.settings.state.value.pageNav == "TWO_PAGE") it - it % 2 else it }) + slot
+                                        if (vm.ui.value.pageIndex != target) vm.goTo(target)
                                     }
                                 }
+                                canvases[slot] = v
+                                if (slot == 0) canvas = v
                             }
-                            canvas = v
-                        }
-                    },
-                    update = { v ->
-                        if (nb != null && page != null) {
-                            val pageChanged = v.tag != page.id
-                            v.notebookId = nb.id
-                            v.themeDeskColor = deskColor
-                            v.paperStyle = nb.paper
-                            v.paperColor = nb.paperColor
-                            v.page = page
-                            if (pageChanged) { v.tag = page.id; v.clearSelection(); v.scrollToTop() }
-                        }
-                        v.tool = tool
-                        v.prefs = InputPrefs(settings.fingerMode, settings.penButton, settings.pressureCurve, settings.holdToShape)
-                    },
-                )
-                selInfo?.let { s ->
-                    val density = LocalDensity.current
-                    val barH = with(density) { 52.dp.toPx() }
-                    val barW = with(density) { (if (s.count > 0) 360 else 220).dp.toPx() }
-                    val y = if (s.top - barH - 12 > 0) s.top - barH - 12 else s.bottom + 12
-                    val x = (s.left).coerceIn(8f, (boxW - barW - 8).coerceAtLeast(8f))
-                    SelectionBar(
-                        modifier = Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) },
-                        hasItems = s.count > 0,
-                        onToText = {
-                            val v = canvas ?: return@SelectionBar
-                            hwRequest = HwRequest(v.selectedStrokes(), v.selectionBitmap())
                         },
-                        onSolve = {
-                            val v = canvas ?: return@SelectionBar
-                            aiImage = v.selectionBitmap()
-                            aiBounds = v.selectionBoundsPage()
+                        onRelease = { v -> if (canvases[slot] === v) canvases[slot] = null; if (canvas === v) canvas = canvases[0] },
+                        update = { v ->
+                            if (nb != null && slotPage != null) {
+                                val pageChanged = v.tag != slotPage.id
+                                v.notebookId = nb.id
+                                v.themeDeskColor = deskColor
+                                v.paperStyle = nb.paper
+                                v.paperColor = nb.paperColor
+                                v.page = slotPage
+                                if (pageChanged) {
+                                    v.tag = slotPage.id; v.clearSelection()
+                                    if (nav == "VERTICAL" && lastSwipe < 0) v.scrollToBottom() else v.scrollToTop()
+                                }
+                            }
+                            v.swipeAxis = when (nav) { "HORIZONTAL", "TWO_PAGE" -> 1; "VERTICAL" -> 2; else -> 0 }
+                            v.tool = tool
+                            v.prefs = InputPrefs(settings.fingerMode, settings.penButton, settings.pressureCurve, settings.holdToShape)
                         },
-                        onDuplicate = { canvas?.duplicateSelection() },
-                        onColor = { canvas?.recolorSelection(it) },
-                        onDelete = { canvas?.deleteSelection() },
-                        onClose = { canvas?.clearSelection() },
                     )
+                    }
+                    if (slot == activeSlot) selInfo?.let { s ->
+                        val density = LocalDensity.current
+                        val barH = with(density) { 52.dp.toPx() }
+                        val barW = with(density) { (if (s.count > 0) 400 else 220).dp.toPx() }
+                        val y = if (s.top - barH - 12 > 0) s.top - barH - 12 else s.bottom + 12
+                        val x = (s.left).coerceIn(8f, (boxW - barW - 8).coerceAtLeast(8f))
+                        SelectionBar(
+                            modifier = Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) },
+                            hasItems = s.count > 0,
+                            canEditText = canvas?.selectedTexts()?.size == 1 && canvas?.selectedStrokes()?.isEmpty() == true,
+                            onEditText = {
+                                val v = canvas ?: return@SelectionBar
+                                val t = v.selectedTexts().singleOrNull() ?: return@SelectionBar
+                                v.clearSelection()
+                                textReq = TextRequest(t.x, t.y, t)
+                            },
+                            onToText = {
+                                val v = canvas ?: return@SelectionBar
+                                hwRequest = HwRequest(v.selectedStrokes(), v.selectionBitmap())
+                            },
+                            onSolve = {
+                                val v = canvas ?: return@SelectionBar
+                                aiImage = v.selectionBitmap()
+                                aiBounds = v.selectionBoundsPage()
+                            },
+                            onDuplicate = { canvas?.duplicateSelection() },
+                            onColor = { canvas?.recolorSelection(it) },
+                            onDelete = { canvas?.deleteSelection() },
+                            onClose = { canvas?.clearSelection() },
+                        )
+                    }
+                    }
+                }
                 }
                 // floating pen toolbar
                 val align = when (dock) {
@@ -379,9 +439,10 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                     Modifier.align(align).padding(10.dp).onGloballyPositioned { c ->
                         val w = c.size.width + with(dens) { 20.dp.toPx() }
                         val h = c.size.height + with(dens) { 20.dp.toPx() }
-                        canvas?.setInsets(
-                            if (dock == Dock.LEFT) w.toFloat() else 0f, if (dock == Dock.TOP) h.toFloat() else 0f,
-                            if (dock == Dock.RIGHT) w.toFloat() else 0f, if (dock == Dock.BOTTOM) h.toFloat() else 0f,
+                        val last = step - 1
+                        for (i in 0..last) canvases[i]?.setInsets(
+                            if (dock == Dock.LEFT && i == 0) w.toFloat() else 0f, if (dock == Dock.TOP) h.toFloat() else 0f,
+                            if (dock == Dock.RIGHT && i == last) w.toFloat() else 0f, if (dock == Dock.BOTTOM) h.toFloat() else 0f,
                         )
                     },
                 ) { bar() }
@@ -449,6 +510,37 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
             text = { OutlinedTextField(t, { t = it }, singleLine = true) },
             confirmButton = { TextButton(onClick = { vm.rename(t.trim().ifEmpty { "Untitled" }); showRename = false }) { Text("Save") } },
             dismissButton = { TextButton(onClick = { showRename = false }) { Text("Cancel") } },
+        )
+    }
+
+    if (showNav) {
+        val opts = listOf(
+            "ARROWS" to "Arrows and new-page button",
+            "HORIZONTAL" to "Horizontal – swipe sideways, past the last page for a new one",
+            "TWO_PAGE" to "Two pages side by side – swipe sideways",
+            "VERTICAL" to "Vertical – swipe up/down, past the last page for a new one",
+        )
+        AlertDialog(
+            onDismissRequest = { showNav = false },
+            title = { Text("Page navigation") },
+            text = {
+                Column {
+                    opts.forEach { (k, label) ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { app.settings.update { it.copy(pageNav = k) }; showNav = false },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(nav == k, { app.settings.update { it.copy(pageNav = k) }; showNav = false })
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    Text(
+                        "Swipe with one finger when fingers scroll, or two fingers when they draw.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = { TextButton(onClick = { showNav = false }) { Text("Done") } },
         )
     }
 
@@ -650,6 +742,8 @@ private fun ToolOptionsDialog(tool: ToolState, onChange: (ToolState) -> Unit, on
 private fun SelectionBar(
     modifier: Modifier,
     hasItems: Boolean,
+    canEditText: Boolean,
+    onEditText: () -> Unit,
     onSolve: () -> Unit,
     onToText: () -> Unit,
     onDuplicate: () -> Unit,
@@ -664,6 +758,7 @@ private fun SelectionBar(
                 Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Solve")
             }
             TextButton(onClick = onToText) { Text("To text") }
+            if (canEditText) IconButton(onClick = onEditText) { Icon(Icons.Default.Edit, "Edit text") }
             if (hasItems) IconButton(onClick = onDuplicate) { Icon(Icons.Default.ContentCopy, "Duplicate") }
             if (hasItems) Box {
                 IconButton(onClick = { colors = true }) { Icon(Icons.Default.Palette, "Colour") }
@@ -793,10 +888,14 @@ private fun AiSheet(
                     }
                 }
                 is AiState.Done -> {
-                    AnswerText(s.text)
+                    var edited by remember(s.text) { mutableStateOf(s.text) }
+                    OutlinedTextField(
+                        edited, { edited = it }, modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Answer (edit before writing)") },
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { onInsert(s.text) }) { Text("Write on page") }
-                        OutlinedButton(onClick = { clipboard.setText(AnnotatedString(s.text)) }) { Text("Copy") }
+                        Button(onClick = { onInsert(edited) }, enabled = edited.isNotBlank()) { Text("Write on page") }
+                        OutlinedButton(onClick = { clipboard.setText(AnnotatedString(edited)) }) { Text("Copy") }
                     }
                 }
                 is AiState.Error -> Text(s.message, color = MaterialTheme.colorScheme.error)

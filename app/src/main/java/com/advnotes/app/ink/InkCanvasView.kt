@@ -69,7 +69,16 @@ class InkCanvasView(context: Context) : View(context) {
         fun onSelectionChanged(info: SelectionInfo?)
         fun onTextRequest(x: Float, y: Float, existing: TextBox?)
         fun onStylusSeen()
+        /** A pan past the page edge along [swipeAxis]: +1 = next page, -1 = previous. */
+        fun onSwipePage(dir: Int) {}
+        /** Any touch began on this canvas. */
+        fun onTouchStart() {}
     }
+
+    /** 0 = no page swiping, 1 = horizontal, 2 = vertical. */
+    var swipeAxis = 0
+    private var overX = 0f
+    private var overY = 0f
 
     var listener: Listener? = null
     val renderer = StrokeRenderer()
@@ -279,6 +288,13 @@ class InkCanvasView(context: Context) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
+        val rubber = overX != 0f || overY != 0f
+        if (rubber) { canvas.save(); canvas.translate(overX * 0.4f, overY * 0.4f) }
+        drawContent(canvas)
+        if (rubber) canvas.restore()
+    }
+
+    private fun drawContent(canvas: Canvas) {
         val erasing = mode == Mode.ERASE && eraseStrokes != null
         val shown = if (erasing) page.copy(strokes = eraseStrokes!!, texts = eraseTexts!!) else page
         val l = layer
@@ -401,6 +417,7 @@ class InkCanvasView(context: Context) : View(context) {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 parent?.requestDisallowInterceptTouchEvent(true)
+                listener?.onTouchStart()
                 hoverX = -1f
                 val tt = e.getToolType(0)
                 if (isStylus(tt)) {
@@ -437,6 +454,7 @@ class InkCanvasView(context: Context) : View(context) {
                 invalidate()
             }
             MotionEvent.ACTION_CANCEL -> {
+                overX = 0f; overY = 0f
                 cancelInput()
                 mode = Mode.IDLE
                 directDraw = false
@@ -478,14 +496,21 @@ class InkCanvasView(context: Context) : View(context) {
         if (span > 10f && navSpan > 10f) newScale = (scale * span / navSpan).coerceIn(0.25f, 8f)
         val px = (navCx - tx) / scale; val py = (navCy - ty) / scale
         scale = newScale
-        tx = cx - px * scale; ty = cy - py * scale
+        tx = cx - px * scale + (if (swipeAxis == 1) overX else 0f)
+        ty = cy - py * scale + (if (swipeAxis == 2) overY else 0f)
         navCx = cx; navCy = cy; navSpan = span
+        val rawTx = tx; val rawTy = ty
         clampViewport()
+        overX = if (swipeAxis == 1) rawTx - tx else 0f
+        overY = if (swipeAxis == 2) rawTy - ty else 0f
         notifySelection()
         invalidate()
     }
 
     private fun endNavigate(e: MotionEvent) {
+        val over = if (swipeAxis == 1) overX else overY
+        overX = 0f; overY = 0f
+        if (swipeAxis != 0 && abs(over) > 90f * density) listener?.onSwipePage(if (over < 0) 1 else -1)
         if (!navMoved && e.eventTime - navDownTime < 250) {
             if (e.eventTime - lastTapTime < 350) { fitPage(); lastTapTime = 0 } else lastTapTime = e.eventTime
         }
@@ -899,6 +924,16 @@ class InkCanvasView(context: Context) : View(context) {
     }
 
     /** Selected pen/highlighter strokes in drawing order (for handwriting recognition). */
+    fun selectedTexts(): List<TextBox> {
+        val sel = selection ?: return emptyList()
+        return page.texts.filter { it.id in sel.textIds }
+    }
+
+    fun scrollToBottom() {
+        ty = -1e6f
+        clampViewport(); afterViewportChange()
+    }
+
     fun selectedStrokes(): List<Stroke> {
         val sel = selection ?: return emptyList()
         return page.strokes.filter { it.id in sel.strokeIds }
