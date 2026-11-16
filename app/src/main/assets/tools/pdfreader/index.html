@@ -100,7 +100,25 @@
   <div id="toast"></div>
 </div>
 
+<!-- The app injects the AdvNotes API before the page loads; including it here is a fallback for
+     WebView versions without document-start scripts (it does nothing if already present). -->
+<script src="../lib/advnotes.js"></script>
+<script>
+  // Show startup problems instead of a blank page.
+  function showFatal(msg) {
+    var h = document.getElementById('home');
+    if (!h) return;
+    h.innerHTML = '<h2>The PDF reader couldn\u2019t start</h2><p style="white-space:pre-wrap">' +
+      String(msg).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }) + '</p>';
+  }
+  window.addEventListener('error', function (e) { showFatal((e.message || 'Script error') + (e.filename ? '\n' + e.filename + ':' + e.lineno : '')); });
+  window.addEventListener('unhandledrejection', function (e) { showFatal(e.reason && e.reason.message || e.reason); });
+  if (!window.AdvNotes) showFatal('The app bridge (AdvNotes) is missing.');
+  // If the module below can't load at all (e.g. a blocked import), say so after a moment.
+  setTimeout(function () { if (!window.__pdfReaderStarted) showFatal('The reader script did not load. Please update Android System WebView from the Play Store.'); }, 4000);
+</script>
 <script type="module">
+window.__pdfReaderStarted = true;
 import * as pdfjsLib from './pdfjs/pdf.min.js';
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./pdfjs/pdf.worker.min.js', import.meta.url).href;
 

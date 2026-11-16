@@ -1,6 +1,6 @@
 /*
  * Adv Notes web-tool API. Injected automatically into every web tool; including it yourself with
- * <script src="https://appassets.androidplatform.net/assets/tools/_lib/advnotes.js"></script>
+ * <script src="https://appassets.androidplatform.net/assets/tools/lib/advnotes.js"></script>
  * is harmless. Full reference: docs/TOOLS.md
  */
 (function () {

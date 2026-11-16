@@ -34,7 +34,7 @@ class ToolRegistry(private val context: Context, private val builtins: List<Note
 
     fun reload() {
         val bundled = runCatching { context.assets.list("tools").orEmpty() }.getOrDefault(emptyArray())
-            .filter { !it.startsWith("_") }
+            .filter { !it.startsWith("_") && it != "lib" }
             .mapNotNull { dir ->
                 runCatching {
                     val m = AppJson.decodeFromString(WebToolManifest.serializer(), context.assets.open("tools/$dir/manifest.json").bufferedReader().readText())

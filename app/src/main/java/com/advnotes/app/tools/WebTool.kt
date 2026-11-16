@@ -49,7 +49,7 @@ import java.util.concurrent.TimeUnit
  *  - /assets/tools/<id>/…   tools bundled in the APK (app/src/main/assets/tools)
  *  - /installed/<id>/…      tools installed from a .zip (files/tools)
  *  - /tooldata/<id>/files/… files the tool stored (e.g. PDFs the user picked)
- * and the page gets the `AdvNotes` JavaScript API (assets/tools/_lib/advnotes.js).
+ * and the page gets the `AdvNotes` JavaScript API (assets/tools/lib/advnotes.js).
  */
 class WebTool(
     val manifest: WebToolManifest,
@@ -73,9 +73,9 @@ class WebTool(
             factory = { ctx ->
                 val files = ctx.filesDir
                 val loader = WebViewAssetLoader.Builder()
-                    .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(ctx))
-                    .addPathHandler("/installed/", WebViewAssetLoader.InternalStoragePathHandler(ctx, File(files, "tools").apply { mkdirs() }))
-                    .addPathHandler("/tooldata/", WebViewAssetLoader.InternalStoragePathHandler(ctx, File(files, "tooldata").apply { mkdirs() }))
+                    .addPathHandler("/assets/", ToolFiles.Assets(ctx))
+                    .addPathHandler("/installed/", ToolFiles.Directory(File(files, "tools").apply { mkdirs() }))
+                    .addPathHandler("/tooldata/", ToolFiles.Directory(File(files, "tooldata").apply { mkdirs() }))
                     .build()
                 WebView(ctx).apply {
                     settings.javaScriptEnabled = true
@@ -105,7 +105,7 @@ class WebTool(
                     }
                     val bridge = Bridge(this, host, scope, if (dark) "dark" else "light")
                     addJavascriptInterface(bridge, "AdvNotesNative")
-                    val shim = runCatching { ctx.assets.open("tools/_lib/advnotes.js").bufferedReader().readText() }.getOrDefault("")
+                    val shim = runCatching { ctx.assets.open("tools/lib/advnotes.js").bufferedReader().readText() }.getOrDefault("")
                     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                         WebViewCompat.addDocumentStartJavaScript(this, shim, setOf("https://appassets.androidplatform.net"))
                     }
