@@ -124,6 +124,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.ui.draw.rotate
@@ -159,6 +160,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
     val panel by vm.panel.collectAsState()
     val tools by app.tools.tools.collectAsState()
     var panelFraction by remember { mutableStateOf(0.38f) }
+    var phonePanelFraction by remember { mutableStateOf(0.62f) }
     var pendingPick by remember { mutableStateOf<((android.net.Uri?) -> Unit)?>(null) }
     val toolPickLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
@@ -302,7 +304,8 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
             BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
             val outerW = maxWidth
             val wide = outerW >= 720.dp
-            val panelW = (outerW * panelFraction).coerceIn(300.dp, outerW - 240.dp)
+            // only used when wide (>= 720dp), but keep the range valid on any width
+            val panelW = (outerW * panelFraction).coerceIn(minOf(300.dp, outerW * 0.5f), maxOf(outerW - 240.dp, minOf(300.dp, outerW * 0.5f)))
             Row(Modifier.fillMaxSize()) {
             if (panel.visible && wide && panelLeft) {
                 ToolPanel(panel, tools, hostFor, vm::openTool, vm::closeTool, vm::showPicker, vm::closePanel,
@@ -373,10 +376,21 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
             }
             }
             if (panel.visible && !wide) {
-                ToolPanel(
-                    panel, tools, hostFor, vm::openTool, vm::closeTool, vm::showPicker, vm::closePanel,
-                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(0.55f),
-                )
+                // Phones: the panel covers the lower part of the page; drag its top edge to resize.
+                val totalH = with(LocalDensity.current) { maxHeight.toPx() }
+                Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(phonePanelFraction)) {
+                    Box(
+                        Modifier.fillMaxWidth().height(14.dp).background(MaterialTheme.colorScheme.surfaceVariant)
+                            .pointerInput(totalH) {
+                                detectVerticalDragGestures { _, dy -> phonePanelFraction = (phonePanelFraction - dy / totalH).coerceIn(0.3f, 0.92f) }
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) { Box(Modifier.size(36.dp, 3.dp).background(MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp))) }
+                    ToolPanel(
+                        panel, tools, hostFor, vm::openTool, vm::closeTool, vm::showPicker, vm::closePanel,
+                        Modifier.fillMaxWidth().weight(1f),
+                    )
+                }
             }
             }
             if (dock == Dock.RIGHT) { VerticalDivider(); bar() }

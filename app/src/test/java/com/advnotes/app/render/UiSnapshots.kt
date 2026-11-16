@@ -246,6 +246,21 @@ class UiSnapshots {
         snap("19_toolbar_bottom")
     }
 
+    /** Regression: SHIFT legends pushed key labels out of the keys with big fonts. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h891dp-night-xxhdpi", fontScale = 1.3f)
+    fun calculatorKeysWithLargeFont() {
+        runBlocking { AdvNotesApp.instance.repo.save(Notebook(title = "Calc", paper = PaperStyle.GRID)) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Calc").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescriptionCompat("Tools")
+        click("Scientific calculator")
+        rule.onNodeWithContentDescriptionCompat("Toggle keyboard") // hide…
+        rule.onNodeWithContentDescriptionCompat("Toggle keyboard") // …and show again
+        snap("20_calculator_large_font")
+    }
+
     private fun androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>.onNodeWithContentDescriptionCompat(desc: String) {
         onNode(androidx.compose.ui.test.hasContentDescription(desc)).performClick()
         waitForIdle()

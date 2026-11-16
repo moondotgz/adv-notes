@@ -44,6 +44,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -53,10 +56,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.OffsetMapping
@@ -279,9 +286,20 @@ private fun CalcMode(
         else "$shown = $res"
     }
 
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+    // Rows of keys: 6 (5 in Base-N) + a 7th in Complex. Leave ~170dp for the setup row, input and
+    // a little history; the keys share the rest, between 30dp and 46dp tall.
+    val rows = if (mode == Mode.COMPLEX) 9 else 8
+    // Heights of the setup row and input box, measured, so the keys get exactly what is left.
+    var setupH by remember { mutableStateOf(52.dp) }
+    var inputH by remember { mutableStateOf(64.dp) }
+    val dens = LocalDensity.current
+    val keyH = ((maxHeight - setupH - inputH - 16.dp) / rows - 4.dp).coerceIn(26.dp, 46.dp)
+    CompositionLocalProvider(LocalKeyHeight provides keyH) {
     Column(Modifier.fillMaxSize()) {
         // SETUP row
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+        Row(Modifier.fillMaxWidth().onSizeChanged { setupH = with(dens) { it.height.toDp() } }
+            .horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (mode == Mode.BASE) {
                 listOf(10 to "DEC", 16 to "HEX", 2 to "BIN", 8 to "OCT").forEach { (b, l) ->
@@ -344,27 +362,36 @@ private fun CalcMode(
         }
 
         // Input line
-        Surface(Modifier.fillMaxWidth().padding(horizontal = 8.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                BasicTextField(
-                    value = input,
-                    onValueChange = { input = it; error = null; fresh = false },
-                    readOnly = keypad,
-                    textStyle = TextStyle(fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurface),
-                    visualTransformation = visual,
-                    singleLine = false,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp),
-                )
+        Surface(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).onSizeChanged { inputH = with(dens) { it.height.toDp() } + 8.dp },
+            shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {
+            Column(Modifier.padding(start = 12.dp, top = 6.dp, bottom = 4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(error ?: if (last != null && fresh && last.hasExact) "S⇔D shows the decimal" else "",
-                        color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { keypad = !keypad }) { Icon(if (keypad) Icons.Default.Keyboard else Icons.Default.KeyboardHide, "Toggle keyboard") }
+                    BasicTextField(
+                        value = input,
+                        onValueChange = { input = it; error = null; fresh = false },
+                        readOnly = keypad,
+                        textStyle = TextStyle(fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurface),
+                        visualTransformation = visual,
+                        singleLine = false,
+                        modifier = Modifier.weight(1f).heightIn(min = 32.dp),
+                    )
+                    IconButton(onClick = { keypad = !keypad }, Modifier.size(40.dp)) {
+                        Icon(if (keypad) Icons.Default.Keyboard else Icons.Default.KeyboardHide, "Toggle keyboard", Modifier.size(20.dp))
+                    }
                 }
+                val hint = error ?: if (last != null && fresh && last.hasExact) "S⇔D shows the decimal" else null
+                if (hint != null) Text(hint,
+                    color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall)
             }
         }
 
         if (keypad) {
+            // A very large system font size would overflow the keys; cap it for the keypad only.
+            val d = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(d.density, minOf(d.fontScale, 1.15f))) {
             with(KeyScope(shift, onShiftUsed = { shift = false }, insert = ::insert)) {
             Column(Modifier.fillMaxWidth().padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -437,6 +464,7 @@ private fun CalcMode(
                 }
             }
             }
+            }
         } else {
             Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.End) {
                 Button(onClick = { evaluate() }) { Text("=") }
@@ -444,8 +472,13 @@ private fun CalcMode(
         }
     }
 
+    }
+    }
     if (catalog) CatalogDialog(onDismiss = { catalog = false }) { s -> insert(s); catalog = false }
 }
+
+/** Key height for the current panel size (shrinks so the whole keypad fits on phones). */
+private val LocalKeyHeight = androidx.compose.runtime.staticCompositionLocalOf { 46.dp }
 
 private enum class KeyAccent { Normal, Digit, Op, Shift, Danger, Equals }
 
@@ -492,16 +525,33 @@ private fun KeyCap(
         KeyAccent.Equals -> cs.primary to cs.onPrimary
         KeyAccent.Normal -> cs.surfaceContainerHigh to cs.onSurface
     }
+    // Tight line boxes so two labels fit regardless of the system font (some fonts have very tall line heights).
+    val tight = TextStyle(
+        platformStyle = PlatformTextStyle(includeFontPadding = false),
+        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+    )
+    val mainSize = if (label.length > 4) 12.sp else if (LocalKeyHeight.current < 40.dp) 15.sp else 16.sp
     Box(
-        modifier.height(42.dp).clip(RoundedCornerShape(10.dp))
+        modifier.height(LocalKeyHeight.current).clip(RoundedCornerShape(10.dp))
             .background(if (enabled) bg else bg.copy(alpha = 0.4f))
             .combinedClickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (sub != null) Text(sub, fontSize = 9.sp, color = Color(0xFFD08A1E), maxLines = 1)
-            Text(label, color = fg, fontSize = if (label.length > 4) 12.sp else 16.sp, maxLines = 1, overflow = TextOverflow.Clip)
-        }
+        // The SHIFT legend sits at the top; the main label is centred in the space below it,
+        // so neither can push the other out of the key.
+        // Tall keys: legend above the label. Short keys (phones): legend tucked into the top-left corner.
+        val compact = LocalKeyHeight.current < 40.dp
+        if (sub != null) Text(
+            sub,
+            if (compact) Modifier.align(Alignment.TopStart).padding(start = 5.dp, top = 2.dp)
+            else Modifier.align(Alignment.TopCenter).padding(top = 3.dp),
+            style = tight.copy(fontSize = if (compact) 8.sp else 9.sp, lineHeight = 10.sp), color = Color(0xFFD08A1E), maxLines = 1,
+        )
+        Text(
+            label,
+            Modifier.align(Alignment.Center).padding(top = if (sub != null && !compact) 12.dp else if (sub != null) 7.dp else 0.dp),
+            style = tight.copy(fontSize = mainSize, lineHeight = mainSize * 1.1f), color = fg,
+            maxLines = 1, softWrap = false, overflow = TextOverflow.Clip,
+        )
     }
 }
 
