@@ -50,6 +50,26 @@ object Backgrounds {
         return null
     }
 
+    // Small renders for the page sidebar: their own cache and thread, so they never delay or evict page renders.
+    private val thumbCache = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
+    }
+    private val thumbPending = HashSet<String>()
+    private val thumbExecutor = Executors.newSingleThreadExecutor()
+
+    /** Cached small bitmap of the background, or null while it renders ([onReady] runs on the main thread). */
+    fun getThumb(notebookId: String, bg: PageBackground, width: Int, onReady: () -> Unit): Bitmap? {
+        val k = key(notebookId, bg) + "@$width"
+        thumbCache.get(k)?.let { return it }
+        synchronized(thumbPending) { if (!thumbPending.add(k)) return null }
+        thumbExecutor.execute {
+            val bmp = runCatching { render(file(notebookId, bg), bg.pdfPage, width) }.getOrNull()
+            synchronized(thumbPending) { thumbPending.remove(k) }
+            if (bmp != null) { thumbCache.put(k, bmp); main.post(onReady) }
+        }
+        return null
+    }
+
     /** Synchronous render (call off the main thread). */
     fun renderNow(notebookId: String, bg: PageBackground, width: Int = RENDER_WIDTH): Bitmap? {
         cache.get(key(notebookId, bg))?.let { if (it.width >= width) return it }
@@ -85,6 +105,6 @@ object Backgrounds {
             PdfRenderer(fd).use { r -> (0 until r.pageCount).map { i -> r.openPage(i).use { it.width to it.height } } }
         }
 
-    fun clear() = cache.evictAll()
+    fun clear() { cache.evictAll(); thumbCache.evictAll() }
 
 }

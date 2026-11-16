@@ -30,6 +30,7 @@ enum class PaperColor(val label: String, val argb: Int, val dark: Boolean = fals
     WHITE("White", 0xFFFFFFFF.toInt()),
     CREAM("Cream", 0xFFFBF6E9.toInt()),
     MINT("Mint", 0xFFF0F7F1.toInt()),
+    PINK("Pink", 0xFFFCE8EF.toInt()),
     SLATE("Dark", 0xFF22252B.toInt(), dark = true),
 }
 
@@ -118,6 +119,26 @@ data class Notebook(
     val pages: List<Page> = listOf(Page()),
     /** When true the notebook keeps exactly its pages: no add-page button and swiping past the end adds nothing. */
     val lockPages: Boolean = false,
+    /** Set when the notebook is in the trash; it is deleted for good [TRASH_DAYS] days later. */
+    val trashedAt: Long? = null,
+    /** Named groups that pages can be bookmarked into (shown in the page sidebar). */
+    val groups: List<PageGroup> = emptyList(),
+    val bookmarks: List<PageBookmark> = emptyList(),
+)
+
+const val TRASH_DAYS = 30
+const val TRASH_MILLIS = TRASH_DAYS * 24L * 60 * 60 * 1000
+
+@Serializable
+data class PageGroup(val id: String = newId(), val name: String, val color: Int)
+
+/** Page [pageId] is bookmarked in group [groupId]. Kept on the notebook, not the page, so undo never touches it. */
+@Serializable
+data class PageBookmark(val pageId: String, val groupId: String)
+
+val GROUP_COLORS = listOf(
+    0xFFE64980.toInt(), 0xFF1C7ED6.toInt(), 0xFF0F8B6F.toInt(), 0xFFF08C00.toInt(),
+    0xFF9C36B5.toInt(), 0xFFE03131.toInt(), 0xFF495057.toInt(),
 )
 
 /** Lightweight listing info so the library doesn't need to keep every stroke in memory. */
@@ -130,11 +151,13 @@ data class NotebookSummary(
     val cover: Int,
     val pageCount: Int,
     val updatedAt: Long,
+    val trashedAt: Long? = null,
 )
 
-fun Notebook.summary() = NotebookSummary(id, title, paper, paperColor, cover, pages.size, updatedAt)
+fun Notebook.summary() = NotebookSummary(id, title, paper, paperColor, cover, pages.size, updatedAt, trashedAt)
 
 val COVER_COLORS = listOf(
     0xFF2D4BD8.toInt(), 0xFF0F8B6F.toInt(), 0xFFD9480F.toInt(), 0xFF9C36B5.toInt(),
     0xFFE03131.toInt(), 0xFF1C7ED6.toInt(), 0xFF495057.toInt(), 0xFFF08C00.toInt(),
+    0xFFE64980.toInt(),
 )

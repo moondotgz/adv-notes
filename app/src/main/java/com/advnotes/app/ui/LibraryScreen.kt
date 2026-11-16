@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -79,6 +80,7 @@ import com.advnotes.app.model.Notebook
 import com.advnotes.app.model.NotebookSummary
 import com.advnotes.app.model.PaperColor
 import com.advnotes.app.model.PaperStyle
+import com.advnotes.app.model.TRASH_DAYS
 import com.advnotes.app.sync.SyncStatus
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -89,11 +91,14 @@ import java.util.Date
 fun LibraryScreen(
     onOpen: (String) -> Unit,
     onSettings: () -> Unit,
+    onTrash: () -> Unit = {},
     sharedFiles: List<android.net.Uri> = emptyList(),
     onShareConsumed: () -> Unit = {},
 ) {
     val app = AdvNotesApp.instance
-    val notebooks by app.repo.summaries.collectAsState()
+    val allNotebooks by app.repo.summaries.collectAsState()
+    val notebooks = remember(allNotebooks) { allNotebooks.filter { it.trashedAt == null } }
+    val trashedCount = allNotebooks.count { it.trashedAt != null }
     val sync by app.drive.status.collectAsState()
     val settings by app.settings.state.collectAsState()
     val scope = rememberCoroutineScope()
@@ -159,6 +164,7 @@ fun LibraryScreen(
 
     LaunchedEffect(Unit) {
         app.repo.refresh()
+        app.repo.purgeTrash()
         if (settings.autoSync) app.drive.sync()
     }
     LaunchedEffect(sync) {
@@ -224,6 +230,11 @@ fun LibraryScreen(
                                     SyncStatus.Idle -> Icon(Icons.Default.CloudSync, "Sync now")
                                 }
                             }
+                        }
+                        FilledTonalIconButton(onClick = onTrash) {
+                            androidx.compose.material3.BadgedBox(badge = {
+                                if (trashedCount > 0) androidx.compose.material3.Badge { Text("$trashedCount") }
+                            }) { Icon(Icons.Default.DeleteOutline, "Trash") }
                         }
                         FilledTonalIconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Settings") }
                     }
@@ -322,9 +333,18 @@ fun LibraryScreen(
     deleting?.let { s ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text("Delete “${s.title}”?") },
-            text = { Text("This removes the notebook and its ${s.pageCount} page(s)" + if (settings.driveAccount != null) ", also from Google Drive at the next sync." else ".") },
-            confirmButton = { TextButton(onClick = { deleting = null; scope.launch { app.repo.delete(s.id) } }) { Text("Delete") } },
+            title = { Text("Move “${s.title}” to the trash?") },
+            text = { Text("It stays in the trash for $TRASH_DAYS days, so you can restore it, and is then deleted for good" + if (settings.driveAccount != null) " (also from Google Drive)." else ".") },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleting = null
+                    scope.launch {
+                        app.repo.trash(s.id)
+                        val r = snackbar.showSnackbar("Moved “${s.title}” to the trash", actionLabel = "Undo")
+                        if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) app.repo.restore(s.id)
+                    }
+                }) { Text("Move to trash") }
+            },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
         )
     }
@@ -370,7 +390,7 @@ private fun NotebookCard(nb: NotebookSummary, onClick: () -> Unit, onEdit: () ->
             DropdownMenu(menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Edit") }, onClick = { menu = false; onEdit() })
                 DropdownMenuItem(text = { Text("Export PDF") }, onClick = { menu = false; onExport() })
-                DropdownMenuItem(text = { Text("Delete") }, onClick = { menu = false; onDelete() })
+                DropdownMenuItem(text = { Text("Move to trash") }, onClick = { menu = false; onDelete() })
             }
         }
         Spacer(Modifier.height(10.dp))

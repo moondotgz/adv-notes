@@ -50,6 +50,7 @@ import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ViewSidebar
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -204,6 +205,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
     var showPaper by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
     var showNav by remember { mutableStateOf(false) }
+    var showPages by remember { mutableStateOf(false) }
     val canvases = remember { arrayOfNulls<InkCanvasView>(2) }
     var activeSlot by remember { mutableStateOf(0) }
     var lastSwipe by remember { mutableStateOf(0) }
@@ -246,6 +248,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                     )
                 },
                 actions = {
+                    IconButton(onClick = { showPages = !showPages }) { Icon(Icons.Default.ViewSidebar, "Page list") }
                     IconButton(onClick = { if (panel.open.isEmpty() && !panel.visible) vm.showPicker() else vm.togglePanel() }) {
                         Icon(Icons.Default.Widgets, "Tools")
                     }
@@ -327,6 +330,13 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
             // only used when wide (>= 720dp), but keep the range valid on any width
             val panelW = (outerW * panelFraction).coerceIn(minOf(300.dp, outerW * 0.5f), maxOf(outerW - 240.dp, minOf(300.dp, outerW * 0.5f)))
             Row(Modifier.fillMaxSize()) {
+            if (showPages && nb != null) {
+                PagesSidebar(
+                    nb = nb, pageIndex = ui.pageIndex, pressureCurve = settings.pressureCurve,
+                    onGo = vm::goTo, onClose = { showPages = false }, vm = vm,
+                    modifier = Modifier.width(if (wide) 168.dp else 140.dp).fillMaxHeight(),
+                )
+            }
             if (panel.visible && wide && panelLeft) {
                 ToolPanel(panel, tools, hostFor, vm::openTool, vm::closeTool, vm::showPicker, vm::closePanel,
                     Modifier.width(panelW).fillMaxHeight(), grip = panelGrip)

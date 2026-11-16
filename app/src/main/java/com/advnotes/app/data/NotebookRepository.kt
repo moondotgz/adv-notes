@@ -3,6 +3,7 @@ package com.advnotes.app.data
 import android.content.Context
 import com.advnotes.app.model.Notebook
 import com.advnotes.app.model.NotebookSummary
+import com.advnotes.app.model.TRASH_MILLIS
 import com.advnotes.app.model.summary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -87,6 +88,20 @@ class NotebookRepository(context: Context) {
             toSave
         }
     }
+
+    /** Moves a notebook to the trash (it syncs like any edit, so other devices trash it too). */
+    suspend fun trash(id: String) { load(id)?.let { save(it.copy(trashedAt = System.currentTimeMillis())) } }
+
+    suspend fun restore(id: String) { load(id)?.let { save(it.copy(trashedAt = null)) } }
+
+    /** Deletes notebooks that have been in the trash for more than [TRASH_DAYS] days. Returns how many. */
+    suspend fun purgeTrash(now: Long = System.currentTimeMillis()): Int {
+        val old = _summaries.value.filter { s -> s.trashedAt?.let { now - it > TRASH_MILLIS } == true }
+        old.forEach { delete(it.id) }
+        return old.size
+    }
+
+    suspend fun emptyTrash() { _summaries.value.filter { it.trashedAt != null }.forEach { delete(it.id) } }
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
         mutex.withLock {

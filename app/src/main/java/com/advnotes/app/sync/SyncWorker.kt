@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit
 class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
         val app = applicationContext as AdvNotesApp
+        app.repo.refresh(); app.repo.purgeTrash()
         return when (app.drive.sync()) {
             is SyncStatus.Error -> if (runAttemptCount < 3) Result.retry() else Result.failure()
             else -> Result.success()

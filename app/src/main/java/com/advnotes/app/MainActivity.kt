@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
                             LibraryScreen(
                                 onOpen = { id -> nav.navigate("editor/$id") },
                                 onSettings = { nav.navigate("settings") },
+                                onTrash = { nav.navigate("trash") },
                                 sharedFiles = sharedUris(intent),
                                 onShareConsumed = { intent = android.content.Intent() },
                             )
@@ -50,6 +51,7 @@ class MainActivity : ComponentActivity() {
                                 onSettings = { nav.navigate("settings") },
                             )
                         }
+                        composable("trash") { com.advnotes.app.ui.TrashScreen(onBack = { nav.popBackStack() }) }
                         composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
                     }
                 }

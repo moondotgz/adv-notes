@@ -173,8 +173,12 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun deletePage() {
         _ui.update { s ->
             val nb = s.notebook ?: return@update s
+            val gone = nb.pages.getOrNull(s.pageIndex)?.id
             val pages = nb.pages.toMutableList().apply { removeAt(s.pageIndex) }.ifEmpty { listOf(Page()) }
-            s.copy(notebook = nb.copy(pages = pages), pageIndex = s.pageIndex.coerceAtMost(pages.size - 1))
+            s.copy(
+                notebook = nb.copy(pages = pages, bookmarks = nb.bookmarks.filter { it.pageId != gone }),
+                pageIndex = s.pageIndex.coerceAtMost(pages.size - 1),
+            )
         }
         scheduleSave(); refreshUndoFlags()
     }
@@ -186,6 +190,41 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             else s.copy(notebook = nb.copy(pages = nb.pages.mapIndexed { i, p -> if (i == s.pageIndex) p.copy(paper = style) else p }))
         }
         scheduleSave()
+    }
+
+    // ---- bookmark groups (page sidebar) -------------------------------------------------------
+
+    private fun editNotebook(block: (Notebook) -> Notebook) {
+        _ui.update { s -> s.copy(notebook = s.notebook?.let(block)) }
+        scheduleSave()
+    }
+
+    /** Creates a group and returns its id (a blank name is ignored). */
+    fun addGroup(name: String): String? {
+        val n = name.trim()
+        if (n.isEmpty()) return null
+        val nb = _ui.value.notebook ?: return null
+        val g = com.advnotes.app.model.PageGroup(name = n, color = com.advnotes.app.model.GROUP_COLORS[nb.groups.size % com.advnotes.app.model.GROUP_COLORS.size])
+        editNotebook { it.copy(groups = it.groups + g) }
+        return g.id
+    }
+
+    fun renameGroup(id: String, name: String) {
+        val n = name.trim()
+        if (n.isEmpty()) return
+        editNotebook { nb -> nb.copy(groups = nb.groups.map { if (it.id == id) it.copy(name = n) else it }) }
+    }
+
+    fun deleteGroup(id: String) =
+        editNotebook { nb -> nb.copy(groups = nb.groups.filter { it.id != id }, bookmarks = nb.bookmarks.filter { it.groupId != id }) }
+
+    /** Adds the page to the group, or removes it if it is already there. */
+    fun toggleBookmark(pageId: String, groupId: String) = editNotebook { nb ->
+        val has = nb.bookmarks.any { it.pageId == pageId && it.groupId == groupId }
+        nb.copy(
+            bookmarks = if (has) nb.bookmarks.filterNot { it.pageId == pageId && it.groupId == groupId }
+            else nb.bookmarks + com.advnotes.app.model.PageBookmark(pageId, groupId),
+        )
     }
 
     fun setLockPages(locked: Boolean) {
