@@ -26,6 +26,7 @@ When you use the solver, handwriting-to-text with an AI engine, or the AI chat t
 ## Other network use
 
 - **Tool marketplace:** the app downloads the list of available tools and their files from a public GitHub repository. No personal data is sent beyond what any web request includes (such as your IP address).
+- **Update check (can be turned off in settings):** when the library opens, the app asks GitHub for the latest release of this project and, if you tap Update, downloads the APK from it. No personal data is sent beyond what any web request includes.
 - **On-device model downloads:** model files are downloaded from Hugging Face when you ask for them.
 - **Web tool:** pages you open in the built-in browser tool are loaded from the sites you visit.
 

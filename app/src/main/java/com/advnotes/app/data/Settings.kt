@@ -60,6 +60,8 @@ data class AppSettings(
     val panelSide: String = "RIGHT",
     /** Page navigation: ARROWS, HORIZONTAL, TWO_PAGE or VERTICAL. */
     val pageNav: String = "ARROWS",
+    /** Look for a newer GitHub release when the library opens. */
+    val checkUpdates: Boolean = true,
 )
 
 /**
@@ -113,6 +115,7 @@ class SettingsStore(context: Context) {
         toolbarDock = prefs.getString("toolbarDock", null) ?: "TOP",
         panelSide = prefs.getString("panelSide", null) ?: "RIGHT",
         pageNav = prefs.getString("pageNav", null) ?: "ARROWS",
+        checkUpdates = prefs.getBoolean("checkUpdates", true),
     )
 
     fun update(block: (AppSettings) -> AppSettings) {
@@ -132,6 +135,7 @@ class SettingsStore(context: Context) {
             .putString("toolbarDock", s.toolbarDock)
             .putString("panelSide", s.panelSide)
             .putString("pageNav", s.pageNav)
+            .putBoolean("checkUpdates", s.checkUpdates)
             .apply()
         _state.value = s
     }

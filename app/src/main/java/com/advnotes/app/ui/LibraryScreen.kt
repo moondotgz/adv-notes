@@ -143,6 +143,12 @@ fun LibraryScreen(
         if (ok) scope.launch { app.drive.sync() }
     }
 
+    var update by remember { mutableStateOf<com.advnotes.app.update.Update?>(null) }
+    LaunchedEffect(Unit) {
+        if (app.settings.state.value.checkUpdates) update = com.advnotes.app.update.Updater.checkQuietly()
+    }
+    update?.let { UpdateDialog(it) { update = null } }
+
     LaunchedEffect(Unit) {
         app.repo.refresh()
         if (settings.autoSync) app.drive.sync()
