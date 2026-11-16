@@ -1,0 +1,847 @@
+package com.advnotes.app.ink
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.DashPathEffect
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
+import android.os.Handler
+import android.os.Looper
+import android.view.MotionEvent
+import android.view.View
+import com.advnotes.app.data.FingerMode
+import com.advnotes.app.data.PenButtonAction
+import com.advnotes.app.model.InkKind
+import com.advnotes.app.model.PAGE_HEIGHT
+import com.advnotes.app.model.PAGE_WIDTH
+import com.advnotes.app.model.Page
+import com.advnotes.app.model.PaperColor
+import com.advnotes.app.model.PaperStyle
+import com.advnotes.app.model.Stroke
+import com.advnotes.app.model.TextBox
+import com.advnotes.app.model.newId
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
+import kotlin.math.sin
+
+enum class Tool { PEN, HIGHLIGHTER, ERASER, LASSO, SHAPE, TEXT }
+enum class EraserMode { STROKE, PARTIAL }
+
+data class ToolState(
+    val tool: Tool = Tool.PEN,
+    val penColor: Int = 0xFF1A1A1A.toInt(),
+    val penWidth: Float = 3.5f,
+    val hlColor: Int = 0x66FFE14D,
+    val hlWidth: Float = 22f,
+    val hlStraight: Boolean = false,
+    val eraserMode: EraserMode = EraserMode.STROKE,
+    val eraserSize: Float = 28f,
+    val shape: ShapeKind = ShapeKind.RECT,
+)
+
+data class InputPrefs(
+    val fingerMode: FingerMode = FingerMode.AUTO,
+    val penButton: PenButtonAction = PenButtonAction.ERASER,
+    val pressureCurve: Float = 1f,
+    val holdToShape: Boolean = true,
+)
+
+/** Info for the floating selection toolbar, in view pixels. */
+data class SelectionInfo(val left: Float, val top: Float, val right: Float, val bottom: Float, val count: Int)
+
+/**
+ * The page surface. Handles stylus/finger input, pressure, palm rejection, zoom/pan and all
+ * tools. Every finished edit is reported through [Listener.onCommit] as a new immutable [Page],
+ * which lets the owner keep a simple undo stack of page snapshots.
+ */
+@SuppressLint("ViewConstructor")
+class InkCanvasView(context: Context) : View(context) {
+
+    interface Listener {
+        fun onCommit(page: Page)
+        fun onSelectionChanged(info: SelectionInfo?)
+        fun onTextRequest(x: Float, y: Float, existing: TextBox?)
+        fun onStylusSeen()
+    }
+
+    var listener: Listener? = null
+    val renderer = StrokeRenderer()
+
+    var page: Page = Page()
+        set(value) {
+            if (value === field) return
+            field = value
+            // A page coming from outside (undo/redo, page switch) invalidates the selection box.
+            if (!committing) clearSelection()
+            layerDirty = true
+            invalidate()
+        }
+    var paperStyle: PaperStyle = PaperStyle.PLAIN
+        set(value) { if (field != value) { field = value; layerDirty = true; invalidate() } }
+    var paperColor: PaperColor = PaperColor.WHITE
+        set(value) { if (field != value) { field = value; layerDirty = true; invalidate() } }
+    var tool: ToolState = ToolState()
+        set(value) {
+            if (field.tool != value.tool && value.tool != Tool.LASSO && selection != null) clearSelection()
+            field = value; invalidate()
+        }
+    var prefs: InputPrefs = InputPrefs()
+        set(value) {
+            if (field.pressureCurve != value.pressureCurve) {
+                renderer.pressureCurve = value.pressureCurve; renderer.clearCache(); layerDirty = true; invalidate()
+            }
+            field = value
+        }
+    var stylusSeen = false
+
+    // ---- viewport: view = page * scale + (tx, ty) ----
+    private var scale = 1f
+    private var tx = 0f
+    private var ty = 0f
+    private var viewportInit = false
+
+    // ---- cached layer of committed content ----
+    private var layer: Bitmap? = null
+    private var layerDirty = true
+    private var directDraw = false
+
+    // ---- paints ----
+    private val deskColor get() = if (paperColor.dark) 0xFF0E0F12.toInt() else 0xFFE4E6EB.toInt()
+    private val shadowPaint = Paint().apply { color = 0x22000000 }
+    private val lassoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeWidth = 2.5f; color = 0xFF3B6CFF.toInt()
+        pathEffect = DashPathEffect(floatArrayOf(14f, 10f), 0f)
+    }
+    private val lassoFill = Paint().apply { color = 0x143B6CFF }
+    private val selPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeWidth = 2f; color = 0xFF3B6CFF.toInt()
+        pathEffect = DashPathEffect(floatArrayOf(10f, 8f), 0f)
+    }
+    private val handlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF3B6CFF.toInt() }
+    private val handleInner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
+    private val cursorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeWidth = 1.5f; color = 0x99000000.toInt()
+    }
+    private val density = resources.displayMetrics.density
+
+    // ---- gesture state ----
+    private enum class Mode { IDLE, DRAW, SNAPPED, ERASE, LASSO, SHAPE, TEXT, MOVE_SEL, SCALE_SEL, NAVIGATE }
+
+    private var mode = Mode.IDLE
+    private var activePointer = -1
+    private var activeIsFinger = false
+    private var effTool = Tool.PEN
+
+    // drawing
+    private val pts = FloatArrayBuilder()
+    private var drawKind = InkKind.PEN
+    private var drawColor = 0
+    private var drawWidth = 0f
+    private var drawPressure = true
+    private var smX = 0f; private var smY = 0f; private var smP = 0f
+    private var snapped: List<FloatArray> = emptyList()
+    private var snappedKind: ShapeKind? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var holdX = 0f; private var holdY = 0f
+    private val holdRunnable = Runnable { onHold() }
+
+    // shape tool / lasso / text
+    private var startX = 0f; private var startY = 0f
+    private var curX = 0f; private var curY = 0f
+    private val lassoPts = ArrayList<Float>()
+
+    // eraser
+    private var eraseStrokes: MutableList<Stroke>? = null
+    private var eraseTexts: MutableList<TextBox>? = null
+    private var eraseChanged = false
+    private var lastEX = 0f; private var lastEY = 0f
+
+    // selection
+    private class Selection(val strokeIds: Set<String>, val textIds: Set<String>, val bounds: RectF) {
+        val ids get() = strokeIds + textIds
+    }
+    private var selection: Selection? = null
+    private var selDx = 0f; private var selDy = 0f; private var selScale = 1f
+
+    // navigation
+    private var navCx = 0f; private var navCy = 0f; private var navSpan = 0f
+    private var navDownTime = 0L; private var navDownX = 0f; private var navDownY = 0f
+    private var navMoved = false
+    private var lastTapTime = 0L
+
+    // hover
+    private var hoverX = -1f; private var hoverY = -1f
+
+    // ------------------------------------------------------------------------------------
+    // Viewport
+    // ------------------------------------------------------------------------------------
+
+    fun fitPage() {
+        if (width == 0) return
+        val margin = 16f * density
+        scale = (width - 2 * margin) / PAGE_WIDTH
+        // On wide screens don't let the page get absurdly large: fit height if width-fit is >1.6x
+        val hScale = (height - 2 * margin) / PAGE_HEIGHT
+        if (scale > hScale * 1.6f) scale = hScale * 1.6f
+        tx = (width - PAGE_WIDTH * scale) / 2f
+        ty = margin
+        afterViewportChange()
+    }
+
+    fun scrollToTop() {
+        ty = 16f * density
+        clampViewport(); afterViewportChange()
+    }
+
+    private fun clampViewport() {
+        val pw = PAGE_WIDTH * scale; val ph = PAGE_HEIGHT * scale
+        val m = 48f * density
+        tx = if (pw + 2 * m <= width) (width - pw) / 2f else tx.coerceIn(width - pw - m, m)
+        ty = if (ph + 2 * m <= height) ty.coerceIn(m, max(m, height - ph - m)) else ty.coerceIn(height - ph - m, m)
+    }
+
+    private fun afterViewportChange() {
+        layerDirty = true
+        notifySelection()
+        invalidate()
+    }
+
+    private fun toPageX(vx: Float) = (vx - tx) / scale
+    private fun toPageY(vy: Float) = (vy - ty) / scale
+    private fun toViewX(px: Float) = px * scale + tx
+    private fun toViewY(py: Float) = py * scale + ty
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        layer?.recycle(); layer = null
+        if (w > 0 && h > 0) {
+            layer = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            if (!viewportInit) { viewportInit = true; fitPage() } else { clampViewport(); afterViewportChange() }
+        }
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Drawing
+    // ------------------------------------------------------------------------------------
+
+    private fun excluded(): Set<String> = selection?.ids ?: emptySet()
+
+    private fun drawScene(c: Canvas, pageToDraw: Page) {
+        c.drawColor(deskColor)
+        c.save()
+        c.translate(tx, ty)
+        c.scale(scale, scale)
+        val sh = 3f / scale
+        c.drawRect(sh, sh * 2, PAGE_WIDTH + sh, PAGE_HEIGHT + sh * 2, shadowPaint)
+        c.clipRect(0f, 0f, PAGE_WIDTH, PAGE_HEIGHT)
+        renderer.drawPage(c, pageToDraw, paperStyle, paperColor, excluded())
+        c.restore()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val erasing = mode == Mode.ERASE && eraseStrokes != null
+        val shown = if (erasing) page.copy(strokes = eraseStrokes!!, texts = eraseTexts!!) else page
+        val l = layer
+        if (directDraw || erasing || l == null) {
+            drawScene(canvas, shown)
+        } else {
+            if (layerDirty) {
+                drawScene(Canvas(l), page)
+                layerDirty = false
+            }
+            canvas.drawBitmap(l, 0f, 0f, null)
+        }
+
+        canvas.save()
+        canvas.translate(tx, ty)
+        canvas.scale(scale, scale)
+        canvas.clipRect(0f, 0f, PAGE_WIDTH, PAGE_HEIGHT)
+
+        // selected items, with the in-progress move/scale applied
+        selection?.let { sel ->
+            canvas.save()
+            canvas.translate(selDx, selDy)
+            canvas.scale(selScale, selScale, sel.bounds.left, sel.bounds.top)
+            for (s in page.strokes) if (s.kind == InkKind.HIGHLIGHTER && s.id in sel.strokeIds) renderer.draw(canvas, s)
+            for (s in page.strokes) if (s.kind == InkKind.PEN && s.id in sel.strokeIds) renderer.draw(canvas, s)
+            for (t in page.texts) if (t.id in sel.textIds) renderer.drawText(canvas, t)
+            canvas.restore()
+        }
+
+        // live stroke
+        when (mode) {
+            Mode.DRAW -> if (pts.points > 0) renderer.draw(canvas, liveStroke(), live = true)
+            Mode.SNAPPED -> snapped.forEach { renderer.draw(canvas, shapeStroke(it, drawKind, drawColor, drawWidth), live = true) }
+            Mode.SHAPE -> ShapeFactory.make(tool.shape, startX, startY, curX, curY).forEach {
+                renderer.draw(canvas, shapeStroke(it, InkKind.PEN, tool.penColor, tool.penWidth), live = true)
+            }
+            else -> Unit
+        }
+        canvas.restore()
+
+        // overlays in view space
+        if (mode == Mode.LASSO && lassoPts.size >= 4) {
+            val p = Path()
+            p.moveTo(toViewX(lassoPts[0]), toViewY(lassoPts[1]))
+            var i = 2
+            while (i < lassoPts.size) { p.lineTo(toViewX(lassoPts[i]), toViewY(lassoPts[i + 1])); i += 2 }
+            canvas.drawPath(p, lassoPaint)
+            p.close()
+            canvas.drawPath(p, lassoFill)
+        }
+        selection?.let { sel ->
+            val r = selViewRect(sel)
+            canvas.drawRect(r, selPaint)
+            val hr = 9f * density
+            canvas.drawCircle(r.right, r.bottom, hr, handlePaint)
+            canvas.drawCircle(r.right, r.bottom, hr * 0.5f, handleInner)
+        }
+        if (mode == Mode.ERASE) {
+            canvas.drawCircle(toViewX(lastEX), toViewY(lastEY), tool.eraserSize / 2f, cursorPaint)
+        } else if (hoverX >= 0 && mode == Mode.IDLE) {
+            val r = when (tool.tool) {
+                Tool.ERASER -> tool.eraserSize / 2f
+                Tool.HIGHLIGHTER -> tool.hlWidth * scale / 2f
+                else -> max(2f, tool.penWidth * scale / 2f)
+            }
+            canvas.drawCircle(hoverX, hoverY, r, cursorPaint)
+        }
+    }
+
+    private fun selViewRect(sel: Selection): RectF {
+        val b = sel.bounds
+        val l = b.left + selDx; val t = b.top + selDy
+        val r = b.left + b.width() * selScale + selDx; val bt = b.top + b.height() * selScale + selDy
+        return RectF(toViewX(l), toViewY(t), toViewX(r), toViewY(bt))
+    }
+
+    private fun liveStroke(): Stroke {
+        if (drawKind == InkKind.HIGHLIGHTER && tool.hlStraight && pts.points >= 2) {
+            val a = floatArrayOf(pts[0], pts[1], pts[pts.size - 3], pts[pts.size - 2])
+            return shapeStroke(a, drawKind, drawColor, drawWidth)
+        }
+        return Stroke(id = "live", kind = drawKind, color = drawColor, width = drawWidth, pts = pts.toArray(), pressure = drawPressure)
+    }
+
+    private fun shapeStroke(xy: FloatArray, kind: InkKind, color: Int, width: Float): Stroke {
+        val dense = if (xy.size <= 4) ShapeFactory.poly(xy) else xy
+        val out = FloatArray(dense.size / 2 * 3)
+        for (i in 0 until dense.size / 2) { out[i * 3] = dense[i * 2]; out[i * 3 + 1] = dense[i * 2 + 1]; out[i * 3 + 2] = 1f }
+        return Stroke(id = newId(), kind = kind, color = color, width = width, pts = out, pressure = false)
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Input
+    // ------------------------------------------------------------------------------------
+
+    private fun isStylus(tt: Int) = tt == MotionEvent.TOOL_TYPE_STYLUS || tt == MotionEvent.TOOL_TYPE_ERASER
+
+    private fun fingersNavigate(): Boolean = when (prefs.fingerMode) {
+        FingerMode.NAVIGATE -> true
+        FingerMode.DRAW -> false
+        FingerMode.AUTO -> stylusSeen
+    }
+
+    override fun onHoverEvent(e: MotionEvent): Boolean {
+        if (!isStylus(e.getToolType(0))) return super.onHoverEvent(e)
+        when (e.actionMasked) {
+            MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE -> { hoverX = e.x; hoverY = e.y; markStylus() }
+            else -> { hoverX = -1f; hoverY = -1f }
+        }
+        invalidate()
+        return true
+    }
+
+    private fun markStylus() {
+        if (!stylusSeen) { stylusSeen = true; listener?.onStylusSeen() }
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(e: MotionEvent): Boolean {
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
+                hoverX = -1f
+                val tt = e.getToolType(0)
+                if (isStylus(tt)) {
+                    markStylus()
+                    beginInput(e, 0, finger = false)
+                } else if (fingersNavigate()) {
+                    beginNavigate(e, -1)
+                } else {
+                    beginInput(e, 0, finger = true)
+                }
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                when {
+                    mode == Mode.NAVIGATE -> resetNavAnchor(e, -1)
+                    activeIsFinger && mode != Mode.IDLE -> {
+                        // A second finger means zoom/pan: abandon the finger stroke.
+                        cancelInput()
+                        beginNavigate(e, -1)
+                    }
+                    // stylus is down: ignore extra touches (palm rejection)
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (mode == Mode.NAVIGATE) navigate(e) else inputMove(e)
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (mode == Mode.NAVIGATE) resetNavAnchor(e, e.actionIndex)
+                else if (e.getPointerId(e.actionIndex) == activePointer) endInput(e)
+            }
+            MotionEvent.ACTION_UP -> {
+                if (mode == Mode.NAVIGATE) endNavigate(e) else if (mode != Mode.IDLE) endInput(e)
+                mode = Mode.IDLE
+                directDraw = false
+                invalidate()
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                cancelInput()
+                mode = Mode.IDLE
+                directDraw = false
+                invalidate()
+            }
+        }
+        return true
+    }
+
+    // ---- navigation ----
+
+    private fun centroid(e: MotionEvent, skip: Int): Triple<Float, Float, Float> {
+        var sx = 0f; var sy = 0f; var n = 0
+        for (i in 0 until e.pointerCount) if (i != skip) { sx += e.getX(i); sy += e.getY(i); n++ }
+        if (n == 0) return Triple(0f, 0f, 0f)
+        val cx = sx / n; val cy = sy / n
+        var span = 0f
+        for (i in 0 until e.pointerCount) if (i != skip) span += hypot(e.getX(i) - cx, e.getY(i) - cy)
+        return Triple(cx, cy, if (n > 1) span / n else 0f)
+    }
+
+    private fun beginNavigate(e: MotionEvent, skip: Int) {
+        mode = Mode.NAVIGATE
+        directDraw = true
+        navDownTime = e.eventTime; navDownX = e.x; navDownY = e.y; navMoved = e.pointerCount > 1
+        resetNavAnchor(e, skip)
+    }
+
+    private fun resetNavAnchor(e: MotionEvent, skip: Int) {
+        val (cx, cy, span) = centroid(e, skip)
+        navCx = cx; navCy = cy; navSpan = span
+        if (e.pointerCount - (if (skip >= 0) 1 else 0) > 1) navMoved = true
+    }
+
+    private fun navigate(e: MotionEvent) {
+        val (cx, cy, span) = centroid(e, -1)
+        if (hypot(e.x - navDownX, e.y - navDownY) > 12 * density) navMoved = true
+        var newScale = scale
+        if (span > 10f && navSpan > 10f) newScale = (scale * span / navSpan).coerceIn(0.25f, 8f)
+        val px = (navCx - tx) / scale; val py = (navCy - ty) / scale
+        scale = newScale
+        tx = cx - px * scale; ty = cy - py * scale
+        navCx = cx; navCy = cy; navSpan = span
+        clampViewport()
+        notifySelection()
+        invalidate()
+    }
+
+    private fun endNavigate(e: MotionEvent) {
+        if (!navMoved && e.eventTime - navDownTime < 250) {
+            if (e.eventTime - lastTapTime < 350) { fitPage(); lastTapTime = 0 } else lastTapTime = e.eventTime
+        }
+        layerDirty = true
+    }
+
+    // ---- tools ----
+
+    private fun beginInput(e: MotionEvent, index: Int, finger: Boolean) {
+        activePointer = e.getPointerId(index)
+        activeIsFinger = finger
+        val vx = e.getX(index); val vy = e.getY(index)
+        val x = toPageX(vx); val y = toPageY(vy)
+        startX = x; startY = y; curX = x; curY = y
+
+        val tt = e.getToolType(index)
+        val btn = e.buttonState
+        val buttonHeld = !finger && (btn and (MotionEvent.BUTTON_STYLUS_PRIMARY or MotionEvent.BUTTON_SECONDARY)) != 0
+        effTool = when {
+            tt == MotionEvent.TOOL_TYPE_ERASER -> Tool.ERASER
+            buttonHeld && prefs.penButton == PenButtonAction.ERASER -> Tool.ERASER
+            buttonHeld && prefs.penButton == PenButtonAction.LASSO -> Tool.LASSO
+            else -> tool.tool
+        }
+
+        // Interact with an existing selection first.
+        selection?.let { sel ->
+            val r = selViewRect(sel)
+            val hr = 22f * density
+            if (hypot(vx - r.right, vy - r.bottom) < hr) { mode = Mode.SCALE_SEL; return }
+            if (r.contains(vx, vy)) { mode = Mode.MOVE_SEL; return }
+            clearSelection()
+        }
+
+        when (effTool) {
+            Tool.PEN, Tool.HIGHLIGHTER -> {
+                mode = Mode.DRAW
+                drawKind = if (effTool == Tool.PEN) InkKind.PEN else InkKind.HIGHLIGHTER
+                drawColor = if (effTool == Tool.PEN) tool.penColor else tool.hlColor
+                drawWidth = if (effTool == Tool.PEN) tool.penWidth else tool.hlWidth
+                drawPressure = !finger && effTool == Tool.PEN && tt == MotionEvent.TOOL_TYPE_STYLUS
+                pts.clear()
+                smX = x; smY = y; smP = pressureOf(e, index, finger)
+                pts.add(x, y, smP)
+                holdX = vx; holdY = vy
+                handler.removeCallbacks(holdRunnable)
+                handler.postDelayed(holdRunnable, HOLD_MS)
+            }
+            Tool.ERASER -> {
+                mode = Mode.ERASE
+                eraseStrokes = page.strokes.toMutableList()
+                eraseTexts = page.texts.toMutableList()
+                eraseChanged = false
+                lastEX = x; lastEY = y
+                eraseAt(x, y)
+            }
+            Tool.LASSO -> {
+                mode = Mode.LASSO
+                lassoPts.clear(); lassoPts += x; lassoPts += y
+            }
+            Tool.SHAPE -> mode = Mode.SHAPE
+            Tool.TEXT -> mode = Mode.TEXT
+        }
+        invalidate()
+    }
+
+    private fun pressureOf(e: MotionEvent, index: Int, finger: Boolean, h: Int = -1): Float {
+        if (finger) return 0.6f
+        val p = if (h >= 0) e.getHistoricalPressure(index, h) else e.getPressure(index)
+        return p.coerceIn(0.02f, 1f)
+    }
+
+    private fun inputMove(e: MotionEvent) {
+        val index = e.findPointerIndex(activePointer)
+        if (index < 0) return
+        val vx = e.getX(index); val vy = e.getY(index)
+        val x = toPageX(vx); val y = toPageY(vy)
+        when (mode) {
+            Mode.DRAW -> {
+                for (h in 0 until e.historySize) {
+                    addPoint(toPageX(e.getHistoricalX(index, h)), toPageY(e.getHistoricalY(index, h)), pressureOf(e, index, activeIsFinger, h))
+                }
+                addPoint(x, y, pressureOf(e, index, activeIsFinger))
+                if (hypot(vx - holdX, vy - holdY) > HOLD_SLOP * density) {
+                    holdX = vx; holdY = vy
+                    handler.removeCallbacks(holdRunnable)
+                    handler.postDelayed(holdRunnable, HOLD_MS)
+                }
+            }
+            Mode.SNAPPED -> {
+                if (snappedKind == ShapeKind.LINE) {
+                    var ex = x; var ey = y
+                    val ang = atan2(ey - startY, ex - startX)
+                    val snap = (Math.round(ang / (Math.PI / 4)) * (Math.PI / 4)).toFloat()
+                    if (abs(ang - snap) < 0.06f) {
+                        val d = hypot(ex - startX, ey - startY)
+                        ex = startX + cos(snap) * d; ey = startY + sin(snap) * d
+                    }
+                    snapped = listOf(floatArrayOf(startX, startY, ex, ey))
+                }
+            }
+            Mode.ERASE -> {
+                // sample along the path so fast swipes don't skip strokes
+                val r = tool.eraserSize / 2f / scale
+                val d = hypot(x - lastEX, y - lastEY)
+                val steps = max(1, (d / (r * 0.6f)).toInt())
+                for (s in 1..steps) eraseAt(lastEX + (x - lastEX) * s / steps, lastEY + (y - lastEY) * s / steps)
+                lastEX = x; lastEY = y
+            }
+            Mode.LASSO -> {
+                if (hypot(x - lassoPts[lassoPts.size - 2], y - lassoPts[lassoPts.size - 1]) > 2f / scale) {
+                    lassoPts += x; lassoPts += y
+                }
+            }
+            Mode.SHAPE, Mode.TEXT -> { curX = x; curY = y }
+            Mode.MOVE_SEL -> { selDx = x - startX; selDy = y - startY; notifySelection() }
+            Mode.SCALE_SEL -> selection?.let { sel ->
+                val b = sel.bounds
+                val w0 = max(b.width(), 1f); val h0 = max(b.height(), 1f)
+                val sx = (b.width() + (x - startX)) / w0
+                val sy = (b.height() + (y - startY)) / h0
+                selScale = max(sx, sy).coerceIn(0.1f, 10f)
+                notifySelection()
+            }
+            else -> Unit
+        }
+        invalidate()
+    }
+
+    private fun addPoint(x: Float, y: Float, p: Float) {
+        // light low-pass filter for smoother lines, stronger on pressure
+        smX += (x - smX) * 0.6f
+        smY += (y - smY) * 0.6f
+        smP += (p - smP) * 0.35f
+        val n = pts.size
+        if (n >= 3 && hypot(smX - pts[n - 3], smY - pts[n - 2]) < 0.5f / scale.coerceAtLeast(0.5f)) {
+            pts.set(n - 1, max(pts[n - 1], smP)); return
+        }
+        pts.add(smX, smY, smP)
+    }
+
+    private fun onHold() {
+        if (mode != Mode.DRAW || pts.points < 4) return
+        val xy = FloatArray(pts.points * 2) { i -> pts[(i / 2) * 3 + (i % 2)] }
+        if (drawKind == InkKind.HIGHLIGHTER) {
+            startX = xy[0]; startY = xy[1]
+            snapped = listOf(floatArrayOf(startX, startY, xy[xy.size - 2], xy[xy.size - 1]))
+            snappedKind = ShapeKind.LINE
+            mode = Mode.SNAPPED
+        } else {
+            if (!prefs.holdToShape) return
+            val res = ShapeRecognizer.recognize(xy) ?: return
+            snapped = res.strokes
+            snappedKind = res.kind
+            if (res.kind == ShapeKind.LINE) {
+                val s = res.strokes[0]
+                startX = s[0]; startY = s[1]
+                snapped = listOf(floatArrayOf(s[0], s[1], s[s.size - 2], s[s.size - 1]))
+            }
+            mode = Mode.SNAPPED
+        }
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        invalidate()
+    }
+
+    private fun eraseAt(x: Float, y: Float) {
+        val strokes = eraseStrokes ?: return
+        val texts = eraseTexts ?: return
+        val r = tool.eraserSize / 2f / scale
+        if (tool.eraserMode == EraserMode.STROKE) {
+            if (strokes.removeAll { Geometry.strokeHitsCircle(it, x, y, r) }) eraseChanged = true
+            if (texts.removeAll { t ->
+                    x >= t.x && x <= t.x + t.width && y >= t.y && y <= t.y + renderer.textHeight(t)
+                }) eraseChanged = true
+        } else {
+            var i = 0
+            while (i < strokes.size) {
+                val s = strokes[i]
+                if (Geometry.strokeHitsCircle(s, x, y, r)) {
+                    val pieces = Geometry.eraseFromStroke(s, x, y, r)
+                    if (pieces != null) {
+                        strokes.removeAt(i)
+                        strokes.addAll(i, pieces)
+                        i += pieces.size
+                        eraseChanged = true
+                        continue
+                    }
+                }
+                i++
+            }
+        }
+    }
+
+    private fun endInput(e: MotionEvent) {
+        handler.removeCallbacks(holdRunnable)
+        when (mode) {
+            Mode.DRAW -> {
+                if (pts.points > 0) {
+                    val s = liveStroke().let {
+                        if (it.id == "live") it.copy(id = newId()) else it
+                    }
+                    commit(page.copy(strokes = page.strokes + s))
+                }
+                pts.clear()
+            }
+            Mode.SNAPPED -> {
+                val newStrokes = snapped.map { shapeStroke(it, drawKind, drawColor, drawWidth) }
+                commit(page.copy(strokes = page.strokes + newStrokes))
+                snapped = emptyList(); snappedKind = null
+            }
+            Mode.ERASE -> {
+                if (eraseChanged) commit(page.copy(strokes = eraseStrokes!!.toList(), texts = eraseTexts!!.toList()))
+                eraseStrokes = null; eraseTexts = null
+            }
+            Mode.LASSO -> {
+                finishLasso()
+                lassoPts.clear()
+            }
+            Mode.SHAPE -> {
+                if (hypot(curX - startX, curY - startY) > 3f) {
+                    val s = ShapeFactory.make(tool.shape, startX, startY, curX, curY)
+                        .map { shapeStroke(it, InkKind.PEN, tool.penColor, tool.penWidth) }
+                    commit(page.copy(strokes = page.strokes + s))
+                }
+            }
+            Mode.TEXT -> {
+                if (hypot(curX - startX, curY - startY) * scale < 12 * density) {
+                    val hit = page.texts.lastOrNull { t ->
+                        startX >= t.x && startX <= t.x + t.width && startY >= t.y && startY <= t.y + renderer.textHeight(t)
+                    }
+                    listener?.onTextRequest(startX, startY, hit)
+                }
+            }
+            Mode.MOVE_SEL, Mode.SCALE_SEL -> applySelectionTransform()
+            else -> Unit
+        }
+        mode = Mode.IDLE
+        activePointer = -1
+        invalidate()
+    }
+
+    private fun cancelInput() {
+        handler.removeCallbacks(holdRunnable)
+        pts.clear(); snapped = emptyList(); lassoPts.clear()
+        eraseStrokes = null; eraseTexts = null
+        selDx = 0f; selDy = 0f; selScale = 1f
+        mode = Mode.IDLE
+        activePointer = -1
+    }
+
+    private var committing = false
+
+    private fun commit(p: Page) {
+        committing = true
+        page = p
+        committing = false
+        listener?.onCommit(p)
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Selection
+    // ------------------------------------------------------------------------------------
+
+    private fun finishLasso() {
+        if (lassoPts.size < 6) return
+        val poly = lassoPts.toFloatArray()
+        val strokes = page.strokes.filter { Geometry.strokeInPolygon(it, poly) }
+        val texts = page.texts.filter { t ->
+            Geometry.pointInPolygon(t.x + t.width / 2, t.y + renderer.textHeight(t) / 2, poly)
+        }
+        if (strokes.isEmpty() && texts.isEmpty()) return
+        setSelection(strokes.map { it.id }.toSet(), texts.map { it.id }.toSet())
+    }
+
+    private fun setSelection(strokeIds: Set<String>, textIds: Set<String>) {
+        val b = RectF()
+        var first = true
+        val tmp = RectF()
+        for (s in page.strokes) if (s.id in strokeIds) {
+            Geometry.bounds(s, tmp); if (first) { b.set(tmp); first = false } else b.union(tmp)
+        }
+        for (t in page.texts) if (t.id in textIds) {
+            tmp.set(t.x, t.y, t.x + t.width, t.y + renderer.textHeight(t))
+            if (first) { b.set(tmp); first = false } else b.union(tmp)
+        }
+        if (first) { clearSelection(); return }
+        b.inset(-6f, -6f)
+        selection = Selection(strokeIds, textIds, b)
+        selDx = 0f; selDy = 0f; selScale = 1f
+        layerDirty = true
+        notifySelection()
+        invalidate()
+    }
+
+    private fun applySelectionTransform() {
+        val sel = selection ?: return
+        if (selDx == 0f && selDy == 0f && selScale == 1f) return
+        val ox = sel.bounds.left; val oy = sel.bounds.top
+        val sc = selScale; val dx = selDx; val dy = selDy
+        val strokes = page.strokes.map { s ->
+            if (s.id in sel.strokeIds) (if (sc != 1f) s.scaled(sc, sc, ox, oy) else s).translated(dx, dy) else s
+        }
+        val texts = page.texts.map { t ->
+            if (t.id in sel.textIds) {
+                val nx = ox + (t.x - ox) * sc + dx
+                val ny = oy + (t.y - oy) * sc + dy
+                t.copy(x = nx, y = ny, width = t.width * sc, size = t.size * sc)
+            } else t
+        }
+        selDx = 0f; selDy = 0f; selScale = 1f
+        commit(page.copy(strokes = strokes, texts = texts))
+        setSelection(sel.strokeIds, sel.textIds)
+    }
+
+    fun hasSelection() = selection != null
+
+    fun clearSelection() {
+        if (selection == null) return
+        selection = null
+        selDx = 0f; selDy = 0f; selScale = 1f
+        layerDirty = true
+        listener?.onSelectionChanged(null)
+        invalidate()
+    }
+
+    fun deleteSelection() {
+        val sel = selection ?: return
+        selection = null
+        commit(page.copy(strokes = page.strokes.filter { it.id !in sel.strokeIds }, texts = page.texts.filter { it.id !in sel.textIds }))
+        listener?.onSelectionChanged(null)
+    }
+
+    fun duplicateSelection() {
+        val sel = selection ?: return
+        val off = 24f
+        val ns = page.strokes.filter { it.id in sel.strokeIds }.map { it.translated(off, off).copy(id = newId()) }
+        val nt = page.texts.filter { it.id in sel.textIds }.map { it.translated(off, off).copy(id = newId()) }
+        commit(page.copy(strokes = page.strokes + ns, texts = page.texts + nt))
+        setSelection(ns.map { it.id }.toSet(), nt.map { it.id }.toSet())
+    }
+
+    fun recolorSelection(color: Int) {
+        val sel = selection ?: return
+        val strokes = page.strokes.map { s ->
+            if (s.id in sel.strokeIds) {
+                if (s.kind == InkKind.HIGHLIGHTER) s.copy(color = (color and 0x00FFFFFF) or (s.color and 0xFF000000.toInt()))
+                else s.copy(color = color)
+            } else s
+        }
+        val texts = page.texts.map { if (it.id in sel.textIds) it.copy(color = color) else it }
+        commit(page.copy(strokes = strokes, texts = texts))
+        layerDirty = true
+        invalidate()
+    }
+
+    fun selectionBoundsPage(): RectF? = selection?.bounds?.let { RectF(it) }
+
+    /** Renders just the selected content onto a plain background, for the AI solver. */
+    fun selectionBitmap(maxSide: Int = 1280): Bitmap? {
+        val sel = selection ?: return null
+        val b = RectF(sel.bounds).apply { inset(-16f, -16f) }
+        val s = min(maxSide / max(b.width(), b.height()), 4f)
+        val w = (b.width() * s).roundToInt().coerceAtLeast(1)
+        val h = (b.height() * s).roundToInt().coerceAtLeast(1)
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawColor(paperColor.argb)
+        c.scale(s, s)
+        c.translate(-b.left, -b.top)
+        val excluded = page.strokes.filter { it.id !in sel.strokeIds }.map { it.id }.toSet() +
+            page.texts.filter { it.id !in sel.textIds }.map { it.id }
+        renderer.drawPage(c, page, paperStyle, paperColor, excluded, drawPaper = false)
+        return bmp
+    }
+
+    private fun notifySelection() {
+        val sel = selection ?: return
+        val r = selViewRect(sel)
+        listener?.onSelectionChanged(SelectionInfo(r.left, r.top, r.right, r.bottom, sel.strokeIds.size + sel.textIds.size))
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        handler.removeCallbacks(holdRunnable)
+    }
+
+    companion object {
+        private const val HOLD_MS = 550L
+        private const val HOLD_SLOP = 5f
+    }
+}
