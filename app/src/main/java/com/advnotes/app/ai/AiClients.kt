@@ -16,8 +16,17 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-/** A request to a vision-capable model: one image plus instructions. */
-data class VisionRequest(val system: String, val prompt: String, val png: ByteArray)
+/** One chat turn. [images] are PNG bytes (only sent on user turns). */
+data class ChatMessage(val fromUser: Boolean, val text: String, val images: List<ByteArray> = emptyList())
+
+/** A request to a vision-capable model: instructions plus a conversation. */
+data class VisionRequest(val system: String, val messages: List<ChatMessage>) {
+    /** Single-turn convenience: one prompt and an optional image. */
+    constructor(system: String, prompt: String, png: ByteArray?) :
+        this(system, listOf(ChatMessage(true, prompt, listOfNotNull(png))))
+
+    val lastImage: ByteArray? get() = messages.lastOrNull { it.images.isNotEmpty() }?.images?.last()
+}
 
 interface AiClient {
     /** Streams text through [onText] and returns the full answer. */
@@ -86,13 +95,14 @@ class OpenAiChatClient(
             put(if (official) "max_completion_tokens" else "max_tokens", 8000)
             putJsonArray("messages") {
                 addJsonObject { put("role", "system"); put("content", req.system) }
-                addJsonObject {
-                    put("role", "user")
-                    putJsonArray("content") {
-                        addJsonObject { put("type", "text"); put("text", req.prompt) }
-                        addJsonObject {
+                for (m in req.messages) addJsonObject {
+                    put("role", if (m.fromUser) "user" else "assistant")
+                    if (!m.fromUser || m.images.isEmpty()) put("content", m.text)
+                    else putJsonArray("content") {
+                        addJsonObject { put("type", "text"); put("text", m.text) }
+                        for (img in m.images) addJsonObject {
                             put("type", "image_url")
-                            putJsonObject("image_url") { put("url", "data:image/png;base64," + req.png.b64()) }
+                            putJsonObject("image_url") { put("url", "data:image/png;base64," + img.b64()) }
                         }
                     }
                 }
@@ -150,16 +160,16 @@ class AnthropicClient(
             put("system", req.system)
             if (useFallbacks) put("fallbacks", "default")
             putJsonArray("messages") {
-                addJsonObject {
-                    put("role", "user")
+                for (m in req.messages) addJsonObject {
+                    put("role", if (m.fromUser) "user" else "assistant")
                     putJsonArray("content") {
-                        addJsonObject {
+                        for (img in m.images) addJsonObject {
                             put("type", "image")
                             putJsonObject("source") {
-                                put("type", "base64"); put("media_type", "image/png"); put("data", req.png.b64())
+                                put("type", "base64"); put("media_type", "image/png"); put("data", img.b64())
                             }
                         }
-                        addJsonObject { put("type", "text"); put("text", req.prompt) }
+                        addJsonObject { put("type", "text"); put("text", m.text.ifEmpty { " " }) }
                     }
                 }
             }
@@ -214,12 +224,14 @@ class ChatGptCodexClient(private val auth: ChatGptAuth, private val model: Strin
             put("stream", true)
             put("store", false)
             putJsonArray("input") {
-                addJsonObject {
+                for (m in req.messages) addJsonObject {
                     put("type", "message")
-                    put("role", "user")
+                    put("role", if (m.fromUser) "user" else "assistant")
                     putJsonArray("content") {
-                        addJsonObject { put("type", "input_text"); put("text", req.prompt) }
-                        addJsonObject { put("type", "input_image"); put("image_url", "data:image/png;base64," + req.png.b64()) }
+                        if (m.fromUser) {
+                            addJsonObject { put("type", "input_text"); put("text", m.text) }
+                            for (img in m.images) addJsonObject { put("type", "input_image"); put("image_url", "data:image/png;base64," + img.b64()) }
+                        } else addJsonObject { put("type", "output_text"); put("text", m.text) }
                     }
                 }
             }

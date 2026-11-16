@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -89,6 +90,24 @@ fun LibraryScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
     var editing by remember { mutableStateOf<NotebookSummary?>(null) }
     var deleting by remember { mutableStateOf<NotebookSummary?>(null) }
 
+    var importing by remember { mutableStateOf(false) }
+    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
+            importing = true
+            try {
+                val r = app.importer.import(uris)
+                importing = false
+                r.warnings.firstOrNull()?.let { scope.launch { snackbar.showSnackbar(it) } }
+                onOpen(r.notebook.id)
+            } catch (e: Exception) {
+                importing = false
+                snackbar.showSnackbar(e.message ?: "Import failed")
+            }
+        }
+    }
+
     val driveAuth = rememberDriveAuthLauncher { ok ->
         if (ok) scope.launch { app.drive.sync() }
     }
@@ -125,6 +144,9 @@ fun LibraryScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
                     } else {
                         IconButton(onClick = onSettings) { Icon(Icons.Default.Cloud, "Set up Google Drive") }
                     }
+                    IconButton(onClick = { importLauncher.launch(arrayOf("*/*")) }) {
+                        Icon(Icons.Default.FileOpen, "Import (PDF, images, Samsung Notes, Xournal++)")
+                    }
                     IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Settings") }
                 },
             )
@@ -143,7 +165,11 @@ fun LibraryScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("No notebooks yet", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(8.dp))
-                    Text("Tap “New notebook” to start writing.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Tap “New notebook” to start writing, or import a PDF,\nimages, a Samsung Notes or a Xournal++ file.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
                 }
             }
         } else {
@@ -189,6 +215,14 @@ fun LibraryScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
                 app.repo.load(s.id)?.let { app.repo.save(it.copy(title = title, paper = paper, paperColor = color, cover = cover)) }
             }
         }
+    }
+    if (importing) {
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = { Text("Importing…") },
+            text = { androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) },
+        )
     }
     deleting?.let { s ->
         AlertDialog(

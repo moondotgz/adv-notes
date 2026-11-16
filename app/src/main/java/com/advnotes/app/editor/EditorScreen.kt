@@ -47,6 +47,7 @@ import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -115,10 +116,19 @@ import com.advnotes.app.ui.ColorDot
 import com.advnotes.app.ui.HIGHLIGHTER_COLORS
 import com.advnotes.app.ui.PEN_COLORS
 import com.advnotes.app.ui.PaperPicker
+import com.advnotes.app.tools.NotebookTool
+import com.advnotes.app.tools.ToolHost
+import com.advnotes.app.tools.ToolPanel
+import com.advnotes.app.tools.ToolStorage
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private data class TextRequest(val x: Float, val y: Float, val existing: TextBox?)
+
+private data class HwRequest(val strokes: List<com.advnotes.app.model.Stroke>, val image: Bitmap?)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -137,10 +147,53 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
     var textReq by remember { mutableStateOf<TextRequest?>(null) }
     var aiImage by remember { mutableStateOf<Bitmap?>(null) }
     var aiBounds by remember { mutableStateOf<RectF?>(null) }
+    var hwRequest by remember { mutableStateOf<HwRequest?>(null) }
+    val panel by vm.panel.collectAsState()
+    val tools by app.tools.tools.collectAsState()
+    var panelFraction by remember { mutableStateOf(0.38f) }
+    var pendingPick by remember { mutableStateOf<((android.net.Uri?) -> Unit)?>(null) }
+    val toolPickLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri -> pendingPick?.invoke(uri); pendingPick = null }
+    val hosts = remember { HashMap<String, ToolHost>() }
+    val hostFor: (NotebookTool) -> ToolHost = { t ->
+        hosts.getOrPut(t.id) {
+            object : ToolHost {
+                override val context get() = ctx
+                override val toolId = t.id
+                override val notebookTitle get() = vm.ui.value.notebook?.title.orEmpty()
+                override val storage = ToolStorage(ctx, t.id)
+                override fun insertText(text: String) {
+                    val v = canvas ?: return
+                    val sel = v.selectionBoundsPage()
+                    if (sel != null) vm.insertAnswer(text, sel, below = true)
+                    else { val r = v.visiblePageRect(); vm.insertTextAt(text, r.left + 30f, r.top + 40f) }
+                    Toast.makeText(ctx, "Added to page", Toast.LENGTH_SHORT).show()
+                }
+                override fun selectionImage() = canvas?.selectionBitmap()
+                override fun pageImage() = canvas?.let { it.regionBitmap(it.visiblePageRect()) }
+                override fun ai() = com.advnotes.app.ai.AiClients.forProvider(app.settings.state.value.provider, app.settings, app.chatGpt, app.local)
+                override fun aiLabel(): String {
+                    val p = app.settings.state.value.provider
+                    val m = if (p == com.advnotes.app.data.ProviderType.LOCAL) app.settings.state.value.localModel else app.settings.model(p)
+                    return "${p.label} · ${m ?: "no model"}"
+                }
+                override fun toast(message: String) = Toast.makeText(ctx, message, Toast.LENGTH_SHORT).show()
+                override fun pickFile(mimeTypes: List<String>, onResult: (android.net.Uri?) -> Unit) {
+                    pendingPick = onResult
+                    toolPickLauncher.launch(mimeTypes.toTypedArray())
+                }
+            }
+        }
+    }
     var showOptions by remember { mutableStateOf(false) }
     var showPaper by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+
+    val insertLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris -> if (uris.isNotEmpty()) vm.insertPagesFrom(uris) { msg -> msg?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show() } } }
 
     val leave = { vm.onLeave(); onBack() }
     BackHandler { leave() }
@@ -168,6 +221,9 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                     )
                 },
                 actions = {
+                    IconButton(onClick = { if (panel.open.isEmpty() && !panel.visible) vm.showPicker() else vm.togglePanel() }) {
+                        Icon(Icons.Default.Widgets, "Tools")
+                    }
                     IconButton(onClick = vm::undo, enabled = ui.canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, "Undo") }
                     IconButton(onClick = vm::redo, enabled = ui.canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, "Redo") }
                     IconButton(onClick = { vm.goTo(ui.pageIndex - 1) }, enabled = ui.pageIndex > 0) {
@@ -183,6 +239,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                         DropdownMenu(menu, { menu = false }) {
                             DropdownMenuItem(text = { Text("Paper style…") }, onClick = { menu = false; showPaper = true })
                             DropdownMenuItem(text = { Text("Rename…") }, onClick = { menu = false; showRename = true })
+                            DropdownMenuItem(text = { Text("Insert pages from file…") }, onClick = { menu = false; insertLauncher.launch(arrayOf("*/*")) })
                             DropdownMenuItem(text = { Text("Fit page to screen") }, onClick = { menu = false; canvas?.fitPage() })
                             DropdownMenuItem(text = { Text("Export PDF") }, onClick = {
                                 menu = false
@@ -203,6 +260,11 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
             ToolBar(tool, onChange = vm::setTool, onOptions = { showOptions = true })
             HorizontalDivider()
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val outerW = maxWidth
+            val wide = outerW >= 720.dp
+            val panelW = (outerW * panelFraction).coerceIn(300.dp, outerW - 240.dp)
+            Row(Modifier.fillMaxSize()) {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
                 val boxW = constraints.maxWidth
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
@@ -224,6 +286,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                     update = { v ->
                         if (nb != null && page != null) {
                             val pageChanged = v.tag != page.id
+                            v.notebookId = nb.id
                             v.paperStyle = nb.paper
                             v.paperColor = nb.paperColor
                             v.page = page
@@ -236,11 +299,16 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                 selInfo?.let { s ->
                     val density = LocalDensity.current
                     val barH = with(density) { 52.dp.toPx() }
-                    val barW = with(density) { 260.dp.toPx() }
+                    val barW = with(density) { (if (s.count > 0) 360 else 220).dp.toPx() }
                     val y = if (s.top - barH - 12 > 0) s.top - barH - 12 else s.bottom + 12
                     val x = (s.left).coerceIn(8f, (boxW - barW - 8).coerceAtLeast(8f))
                     SelectionBar(
                         modifier = Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) },
+                        hasItems = s.count > 0,
+                        onToText = {
+                            val v = canvas ?: return@SelectionBar
+                            hwRequest = HwRequest(v.selectedStrokes(), v.selectionBitmap())
+                        },
                         onSolve = {
                             val v = canvas ?: return@SelectionBar
                             aiImage = v.selectionBitmap()
@@ -252,6 +320,27 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                         onClose = { canvas?.clearSelection() },
                     )
                 }
+            }
+            if (panel.visible && wide) {
+                // drag the divider to resize the panel
+                val totalPx = with(LocalDensity.current) { outerW.toPx() }
+                Box(
+                    Modifier.fillMaxHeight().width(10.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .pointerInput(totalPx) {
+                            detectHorizontalDragGestures { _, dx -> panelFraction = (panelFraction - dx / totalPx).coerceIn(0.25f, 0.7f) }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) { Box(Modifier.size(3.dp, 36.dp).background(MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp))) }
+                ToolPanel(panel, tools, hostFor, vm::openTool, vm::closeTool, vm::showPicker, vm::closePanel, Modifier.width(panelW).fillMaxHeight())
+            }
+            }
+            if (panel.visible && !wide) {
+                ToolPanel(
+                    panel, tools, hostFor, vm::openTool, vm::closeTool, vm::showPicker, vm::closePanel,
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(0.55f),
+                )
+            }
             }
         }
     }
@@ -295,6 +384,15 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
             vm.upsertText(req.x, req.y, req.existing, text, size, color)
             textReq = null
         }
+    }
+
+    hwRequest?.let { req ->
+        HandwritingSheet(
+            req = req,
+            onReplace = { text, size -> canvas?.replaceSelectionWithText(text, size); hwRequest = null },
+            onAddBelow = { text -> vm.insertAnswer(text, canvas?.selectionBoundsPage(), below = true); canvas?.clearSelection(); hwRequest = null },
+            onDismiss = { hwRequest = null },
+        )
     }
 
     aiImage?.let { bmp ->
@@ -420,7 +518,9 @@ private fun ToolOptionsDialog(tool: ToolState, onChange: (ToolState) -> Unit, on
 @Composable
 private fun SelectionBar(
     modifier: Modifier,
+    hasItems: Boolean,
     onSolve: () -> Unit,
+    onToText: () -> Unit,
     onDuplicate: () -> Unit,
     onColor: (Int) -> Unit,
     onDelete: () -> Unit,
@@ -432,8 +532,9 @@ private fun SelectionBar(
             TextButton(onClick = onSolve) {
                 Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Solve")
             }
-            IconButton(onClick = onDuplicate) { Icon(Icons.Default.ContentCopy, "Duplicate") }
-            Box {
+            TextButton(onClick = onToText) { Text("To text") }
+            if (hasItems) IconButton(onClick = onDuplicate) { Icon(Icons.Default.ContentCopy, "Duplicate") }
+            if (hasItems) Box {
                 IconButton(onClick = { colors = true }) { Icon(Icons.Default.Palette, "Colour") }
                 DropdownMenu(colors, { colors = false }) {
                     Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -441,7 +542,7 @@ private fun SelectionBar(
                     }
                 }
             }
-            IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, "Delete") }
+            if (hasItems) IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, "Delete") }
             IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Deselect") }
         }
     }
@@ -492,6 +593,7 @@ private fun AiSheet(
     val settings by app.settings.state.collectAsState()
     val ai by vm.ai.collectAsState()
     var mode by remember { mutableStateOf(SolveMode.SOLVE) }
+    var subject by remember { mutableStateOf(vm.lastSubject) }
     var extra by remember { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
     val provider = settings.provider
@@ -513,7 +615,7 @@ private fun AiSheet(
                 Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Math solver", style = MaterialTheme.typography.titleMedium)
+                    Text("Solver", style = MaterialTheme.typography.titleMedium)
                     Text("${provider.label} · $modelLabel", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -525,17 +627,22 @@ private fun AiSheet(
                     Modifier.fillMaxWidth().heightIn(max = 160.dp).padding(8.dp),
                 )
             }
+            Text("Subject", style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                com.advnotes.app.ai.Subject.entries.forEach { sub -> FilterChip(sub == subject, { subject = sub }, label = { Text(sub.label) }) }
+            }
+            Text("What to do", style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SolveMode.entries.forEach { m -> FilterChip(m == mode, { mode = m }, label = { Text(m.label) }) }
             }
             OutlinedTextField(
                 extra, { extra = it }, modifier = Modifier.fillMaxWidth(),
                 label = { Text("Extra instructions (optional)") },
-                placeholder = { Text("e.g. solve for x, use radians") },
+                placeholder = { Text("e.g. solve for x, use radians, answer in kJ/mol") },
             )
             val running = ai is AiState.Running
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { vm.solve(image, mode, extra) }, enabled = !running) {
+                Button(onClick = { vm.solve(image, mode, extra, subject) }, enabled = !running) {
                     Text(if (ai is AiState.Done || ai is AiState.Error) "Ask again" else "Solve")
                 }
                 if (running) OutlinedButton(onClick = vm::cancelAi) { Text("Stop") }
@@ -577,3 +684,104 @@ private fun AnswerText(text: String) {
     }
 }
 
+
+// ----------------------------------------------------------------------------------------
+// Handwriting → text sheet
+// ----------------------------------------------------------------------------------------
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HandwritingSheet(
+    req: HwRequest,
+    onReplace: (String, Float) -> Unit,
+    onAddBelow: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val app = AdvNotesApp.instance
+    val settings by app.settings.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
+    val hasInk = req.strokes.isNotEmpty()
+    var lang by remember { mutableStateOf(com.advnotes.app.ai.Handwriting.byName(settings.hwLanguage) ?: com.advnotes.app.ai.Handwriting.LANGUAGES[1]) }
+    var engine by remember {
+        mutableStateOf(
+            if (!hasInk) com.advnotes.app.ai.HwEngine.AI
+            else runCatching { com.advnotes.app.ai.HwEngine.valueOf(settings.hwEngine) }.getOrDefault(com.advnotes.app.ai.HwEngine.ON_DEVICE)
+        )
+    }
+    var text by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var job by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var langMenu by remember { mutableStateOf(false) }
+
+    fun run() {
+        job?.cancel(); error = null; text = ""
+        app.settings.update { it.copy(hwLanguage = lang.name, hwEngine = engine.name) }
+        job = scope.launch {
+            try {
+                text = if (engine == com.advnotes.app.ai.HwEngine.ON_DEVICE) {
+                    com.advnotes.app.ai.Handwriting.recognizeOnDevice(req.strokes, lang) { status = it }
+                } else {
+                    status = "Asking ${settings.provider.label}…"
+                    val client = com.advnotes.app.ai.AiClients.forProvider(settings.provider, app.settings, app.chatGpt, app.local)
+                    com.advnotes.app.ai.Handwriting.recognizeAi(client, req.image ?: error("No image"), lang) { text = it }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error = e.message ?: e.toString()
+            }
+            status = null
+        }
+    }
+    LaunchedEffect(Unit) { run() }
+
+    ModalBottomSheet(onDismissRequest = { job?.cancel(); onDismiss() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Handwriting to text", style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box {
+                    OutlinedButton(onClick = { langMenu = true }) { Text(lang.name) }
+                    DropdownMenu(langMenu, { langMenu = false }, Modifier.heightIn(max = 400.dp)) {
+                        com.advnotes.app.ai.Handwriting.LANGUAGES.forEach { l ->
+                            DropdownMenuItem(text = { Text(l.name) }, onClick = {
+                                langMenu = false; lang = l
+                                if (l.tag == null) engine = com.advnotes.app.ai.HwEngine.AI
+                                run()
+                            })
+                        }
+                    }
+                }
+                com.advnotes.app.ai.HwEngine.entries.forEach { e ->
+                    val enabled = e == com.advnotes.app.ai.HwEngine.AI || (hasInk && lang.tag != null)
+                    FilterChip(engine == e, { engine = e; run() }, label = { Text(e.label) }, enabled = enabled)
+                }
+            }
+            Text(
+                if (engine == com.advnotes.app.ai.HwEngine.ON_DEVICE) "Recognised on this device from your pen strokes (Google ML Kit). Works offline after the language model downloads."
+                else "Sent as an image to ${settings.provider.label}. Also reads printed text and mixed languages.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            status?.let {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)); Text(it)
+                }
+            }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            OutlinedTextField(
+                text, { text = it }, modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                label = { Text("Text (you can edit it)") },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (hasInk) Button(enabled = text.isNotBlank(), onClick = { onReplace(text, 24f) }) { Text("Replace ink") }
+                OutlinedButton(enabled = text.isNotBlank(), onClick = { onAddBelow(text) }) { Text(if (hasInk) "Keep ink, add text" else "Add to page") }
+                TextButton(enabled = text.isNotBlank(), onClick = { clipboard.setText(AnnotatedString(text)) }) { Text("Copy") }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}

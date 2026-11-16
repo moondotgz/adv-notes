@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import com.advnotes.app.AdvNotesApp
 import com.advnotes.app.MainActivity
@@ -157,6 +158,60 @@ class UiSnapshots {
     @Test fun settings() {
         rule.onNodeWithContentDescriptionCompat("Settings")
         snap("06_settings")
+    }
+
+    private fun click(text: String) {
+        rule.onAllNodesWithText(text, useUnmergedTree = true)[0].performClick()
+        rule.waitForIdle()
+    }
+
+    @Test fun toolsAndImport() {
+        val app = AdvNotesApp.instance
+        // Import a real Samsung Notes file through the importer (same code path as the Import button)
+        val sdocx = File.createTempFile("res", "s.sdocx")
+        javaClass.getResourceAsStream("/import/sample2.sdocx")!!.use { i -> sdocx.outputStream().use { i.copyTo(it) } }
+        runBlocking {
+            val (nb, _) = com.advnotes.app.importer.SamsungNotes.import(com.advnotes.app.model.newId(), "Graph notes (Samsung Notes)", sdocx)
+            app.repo.save(nb)
+            app.repo.save(Notebook(title = "Chemistry", paper = PaperStyle.OXFORD, cover = 0xFF0F8B6F.toInt()))
+        }
+        rule.waitForIdle()
+        snap("10_library_import")
+
+        rule.onNodeWithText("Graph notes (Samsung Notes)").performClick()
+        rule.waitForIdle()
+        snap("11_imported_samsung_notes")
+        rule.activity.onBackPressedDispatcher.onBackPressed()
+        rule.waitForIdle()
+
+        rule.onNodeWithText("Chemistry").performClick()
+        rule.waitForIdle()
+        val canvas = findCanvas(rule.activity.window.decorView)!!
+        pen(canvas, wave(120f, 260f, 500f, 22f, 16f), { 0.2f + 0.8f * sin(it * 3.14f) })
+
+        // Tools panel -> picker -> calculator
+        rule.onNodeWithContentDescriptionCompat("Tools")
+        snap("12_tool_picker")
+        click("Scientific calculator")
+        for (k in listOf("√", "8", ")", "+", "1", "÷", "3", "=")) click(k)
+        snap("13_calculator")
+
+        click("Equation")
+        snap("14_calculator_equation")
+
+        // AI chat tool
+        rule.onNodeWithContentDescriptionCompat("Open a tool")
+        click("AI chat")
+        snap("15_ai_chat")
+
+        // Solver sheet with subjects
+        rule.onNodeWithContentDescriptionCompat("Hide panel")
+        rule.onNodeWithContentDescriptionCompat("Lasso")
+        pen(canvas, loop(420f, 260f, 330f, 90f), { 0.5f })
+        assertTrue(canvas.hasSelection())
+        snap("16_selection_bar")
+        rule.onNodeWithText("Solve", useUnmergedTree = true).performClick()
+        snap("17_solver_subjects")
     }
 
     private fun androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>.onNodeWithContentDescriptionCompat(desc: String) {

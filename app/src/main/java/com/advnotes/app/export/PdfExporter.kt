@@ -6,25 +6,26 @@ import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
 import com.advnotes.app.ink.StrokeRenderer
 import com.advnotes.app.model.Notebook
-import com.advnotes.app.model.PAGE_HEIGHT
+import com.advnotes.app.ink.Backgrounds
 import com.advnotes.app.model.PAGE_WIDTH
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
 object PdfExporter {
-    /** A4 in PostScript points. */
+    /** A4 width in PostScript points; heights follow each page's aspect ratio. */
     private const val PT_W = 595
-    private const val PT_H = 842
 
     suspend fun export(context: Context, nb: Notebook, pressureCurve: Float): File = withContext(Dispatchers.Default) {
         val doc = PdfDocument()
         val renderer = StrokeRenderer(pressureCurve)
         nb.pages.forEachIndexed { i, page ->
-            val p = doc.startPage(PdfDocument.PageInfo.Builder(PT_W, PT_H, i + 1).create())
+            val h = (PT_W * page.height / PAGE_WIDTH).toInt()
+            val p = doc.startPage(PdfDocument.PageInfo.Builder(PT_W, h, i + 1).create())
             val c = p.canvas
-            c.scale(PT_W / PAGE_WIDTH, PT_H / PAGE_HEIGHT)
-            renderer.drawPage(c, page, nb.paper, nb.paperColor)
+            c.scale(PT_W / PAGE_WIDTH, PT_W / PAGE_WIDTH)
+            val bg = page.background?.let { Backgrounds.renderNow(nb.id, it, 1600) }
+            renderer.drawPage(c, page, nb.paper, nb.paperColor, background = bg)
             doc.finishPage(p)
         }
         val dir = File(context.cacheDir, "exports").apply { mkdirs() }

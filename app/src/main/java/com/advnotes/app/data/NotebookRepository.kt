@@ -45,6 +45,11 @@ class NotebookRepository(context: Context) {
     val summaries: StateFlow<List<NotebookSummary>> = _summaries
 
     private fun file(id: String) = File(dir, "$id.json")
+    private val assetRoot = File(context.filesDir, "assets").apply { mkdirs() }
+
+    /** Folder holding a notebook's imported files (PDFs, images). */
+    fun assetDir(notebookId: String) = File(assetRoot, notebookId)
+    fun assetFile(notebookId: String, name: String) = File(assetDir(notebookId), name)
 
     suspend fun refresh() = withContext(Dispatchers.IO) {
         val list = dir.listFiles { f -> f.name.endsWith(".json") }.orEmpty().mapNotNull { f ->
@@ -86,6 +91,7 @@ class NotebookRepository(context: Context) {
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
         mutex.withLock {
             file(id).delete()
+            assetDir(id).deleteRecursively()
             _summaries.value = _summaries.value.filter { it.id != id }
         }
         updateSyncState { st ->
@@ -97,6 +103,7 @@ class NotebookRepository(context: Context) {
     suspend fun deleteLocalOnly(id: String) = withContext(Dispatchers.IO) {
         mutex.withLock {
             file(id).delete()
+            assetDir(id).deleteRecursively()
             _summaries.value = _summaries.value.filter { it.id != id }
         }
     }

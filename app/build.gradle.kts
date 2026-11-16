@@ -20,29 +20,25 @@ android {
         versionName = "0.1.0"
         buildConfigField("boolean", "HAS_LLAMA", buildLlama.toString())
 
-        if (buildLlama) {
-            ndk { abiFilters += listOf("arm64-v8a") }
-            externalNativeBuild {
-                cmake {
-                    arguments += listOf(
-                        "-DANDROID_STL=c++_shared",
-                        "-DCMAKE_BUILD_TYPE=Release",
-                        "-DGGML_OPENMP=OFF",
-                        "-DLLAMA_CURL=OFF",
-                    )
-                    cppFlags += listOf("-O3")
-                }
+        ndk { abiFilters += listOf("arm64-v8a") }
+        externalNativeBuild {
+            cmake {
+                arguments += listOf(
+                    "-DANDROID_STL=c++_shared",
+                    "-DCMAKE_BUILD_TYPE=Release",
+                    "-DADVNOTES_LLAMA=${if (buildLlama) "ON" else "OFF"}",
+                    "-DGGML_OPENMP=OFF",
+                )
+                cppFlags += listOf("-O3")
             }
         }
     }
 
-    if (buildLlama) {
-        ndkVersion = "27.2.12479018"
-        externalNativeBuild {
-            cmake {
-                path = file("src/main/cpp/CMakeLists.txt")
-                version = "3.22.1"
-            }
+    ndkVersion = "27.2.12479018"
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 
@@ -98,6 +94,7 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.3")
     implementation("androidx.security:security-crypto:1.1.0")
     implementation("androidx.browser:browser:1.8.0")
+    implementation("androidx.webkit:webkit:1.12.1")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
@@ -105,6 +102,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     implementation("com.google.android.gms:play-services-auth:21.4.0")
+    implementation("com.google.mlkit:digital-ink-recognition:19.0.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16")
@@ -114,4 +112,32 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     systemProperty("robolectric.dependency.repo.url", "https://repo1.maven.org/maven2")
+}
+
+// Builds the calculator engine for the host so JVM (Robolectric) tests exercise the real C++ code
+// through JNI. Skipped quietly if no host C++ compiler is installed.
+val hostNativeDir = layout.buildDirectory.dir("host-native")
+val buildHostCasio = tasks.register<Exec>("buildHostCasio") {
+    val out = hostNativeDir.get().asFile
+    val javaHome = System.getProperty("java.home")
+    inputs.dir("src/main/cpp/casio/src/core")
+    inputs.dir("src/main/cpp/casio_shim")
+    inputs.dir("src/main/cpp/casio_bridge")
+    outputs.dir(out)
+    isIgnoreExitValue = true
+    doFirst { out.mkdirs() }
+    workingDir = file("src/main/cpp")
+    commandLine(
+        "sh", "-c",
+        "g++ -std=c++20 -O1 -shared -fPIC -I'$javaHome/include' -I'$javaHome/include/linux' " +
+            "-Icasio_shim -Icasio/src/core -Icasio_bridge casio/src/core/*.cpp casio_bridge/casio_api.cpp casio_bridge/casio_jni.cpp " +
+            "-o '$out/libadvnotes_casio.so' 2>/dev/null || echo 'host calculator build skipped'",
+    )
+}
+tasks.withType<Test>().configureEach {
+    dependsOn(buildHostCasio)
+    inputs.files(buildHostCasio)
+    // A native library can be loaded by one classloader per JVM, and Robolectric uses one per test class.
+    forkEvery = 1
+    systemProperty("java.library.path", hostNativeDir.get().asFile.path)
 }

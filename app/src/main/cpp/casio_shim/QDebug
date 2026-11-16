@@ -1,0 +1,5 @@
+#pragma once
+#include "qtshim.h"
+struct QDebugSink { template <typename T> QDebugSink &operator<<(const T &) { return *this; } };
+inline QDebugSink qDebug() { return {}; }
+inline QDebugSink qWarning() { return {}; }

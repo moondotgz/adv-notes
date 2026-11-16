@@ -1,0 +1,17 @@
+<?xml version="1.0" standalone="no"?>
+<xournal creator="xournalpp 1.2.3" fileversion="4">
+<title>Xournal++ document</title>
+<page width="595.27559" height="841.88976">
+<background type="solid" color="#ffffffff" style="graph"/>
+<layer>
+<stroke tool="pen" color="#000000ff" width="2.26 1.1 1.8 2.2 2.0 1.2">72 100 120 110 170 95 220 120 260 100 300 115</stroke>
+<stroke tool="highlighter" color="#ffff00ff" width="8.5">72 140 300 140</stroke>
+<stroke tool="pen" color="#3333ccff" width="1.41">80 200 140 260 200 200</stroke>
+<text font="Sans" size="12" x="72" y="300" color="#000000ff">E = mc²</text>
+</layer>
+</page>
+<page width="595.27559" height="841.88976">
+<background type="solid" color="#ffffffff" style="lined"/>
+<layer><stroke tool="pen" color="red" width="1.41">100 100 200 200</stroke></layer>
+</page>
+</xournal>

@@ -153,8 +153,14 @@ class LocalLlama(private val context: Context, private val settings: SettingsSto
                 }
                 val ctx = currentCoroutineContext()
                 val sb = StringBuilder()
-                val prompt = req.system + "\n\n" + req.prompt
-                LlamaBridge.generate(handle, prompt, req.png, 1500, object : LlamaBridge.TokenCallback {
+                // Small local models: flatten the conversation into one prompt and send the latest image.
+                val prompt = buildString {
+                    append(req.system).append("\n\n")
+                    val turns = req.messages
+                    if (turns.size > 1) for (m in turns.dropLast(1)) append(if (m.fromUser) "User: " else "Assistant: ").append(m.text).append("\n")
+                    append(turns.last().text)
+                }
+                LlamaBridge.generate(handle, prompt, req.lastImage, 1500, object : LlamaBridge.TokenCallback {
                     override fun onToken(piece: String): Boolean {
                         sb.append(piece)
                         onText(sb.toString())

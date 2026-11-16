@@ -121,6 +121,26 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         scheduleSave(); refreshUndoFlags()
     }
 
+    /** Imports PDF/image pages (or another note's pages) after the current page. */
+    fun insertPagesFrom(uris: List<android.net.Uri>, onResult: (String?) -> Unit) {
+        val nb = _ui.value.notebook ?: return
+        viewModelScope.launch {
+            try {
+                saveNow()
+                val r = a.importer.build(uris, nb.id)
+                _ui.update { s ->
+                    val cur = s.notebook ?: return@update s
+                    val pages = cur.pages.toMutableList().apply { addAll(s.pageIndex + 1, r.notebook.pages) }
+                    s.copy(notebook = cur.copy(pages = pages), pageIndex = s.pageIndex + 1)
+                }
+                scheduleSave(); refreshUndoFlags()
+                onResult(r.warnings.firstOrNull() ?: "Inserted ${r.notebook.pages.size} page(s)")
+            } catch (e: Exception) {
+                onResult(e.message ?: "Import failed")
+            }
+        }
+    }
+
     fun deletePage() {
         _ui.update { s ->
             val nb = s.notebook ?: return@update s
@@ -157,14 +177,18 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- AI ----------------------------------------------------------------------------
 
-    fun solve(bitmap: Bitmap, mode: SolveMode, extra: String) {
+    /** Remembered across solves in this notebook session. */
+    var lastSubject = com.advnotes.app.ai.Subject.AUTO
+
+    fun solve(bitmap: Bitmap, mode: SolveMode, extra: String, subject: com.advnotes.app.ai.Subject = lastSubject) {
+        lastSubject = subject
         aiJob?.cancel()
         _ai.value = AiState.Running("")
         aiJob = viewModelScope.launch {
             try {
                 val provider = a.settings.state.value.provider
                 val client = AiClients.forProvider(provider, a.settings, a.chatGpt, a.local)
-                val req = MathSolver.request(bitmap, mode, extra)
+                val req = MathSolver.request(bitmap, mode, extra, subject)
                 val text = client.complete(req) { partial -> _ai.value = AiState.Running(partial) }
                 _ai.value = if (text.isBlank()) AiState.Error("The model returned an empty answer.") else AiState.Done(text.trim())
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -178,10 +202,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun cancelAi() { aiJob?.cancel(); _ai.value = AiState.Idle }
 
     /** Writes the answer onto the page next to (or below) the selection. */
-    fun insertAnswer(text: String, near: RectF?) {
+    fun insertAnswer(text: String, near: RectF?, below: Boolean = false) {
         val p = currentPage ?: return
         val margin = 8f * MM
-        val (x, y, w) = if (near != null && PAGE_WIDTH - near.right > 70f * MM) {
+        val (x, y, w) = if (!below && near != null && PAGE_WIDTH - near.right > 70f * MM) {
             Triple(near.right + 4f * MM, near.top, PAGE_WIDTH - near.right - 4f * MM - margin)
         } else {
             val top = (near?.bottom ?: 40f * MM) + 4f * MM
@@ -190,6 +214,30 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
         commit(p.copy(texts = p.texts + TextBox(x = x, y = y, width = w, text = text, size = 20f, color = 0xFF1F3FBF.toInt())))
         _ai.value = AiState.Idle
+    }
+
+    /** Adds a text box at page position (x, y), e.g. from a tool. */
+    fun insertTextAt(text: String, x: Float, y: Float) {
+        val p = currentPage ?: return
+        if (text.isBlank()) return
+        val left = x.coerceIn(8f * MM, PAGE_WIDTH - 60f * MM)
+        commit(p.copy(texts = p.texts + TextBox(x = left, y = y.coerceIn(0f, p.height - 20f), width = PAGE_WIDTH - left - 8f * MM, text = text, size = 20f, color = 0xFF1F3FBF.toInt())))
+    }
+
+    // ---- tools side panel ----------------------------------------------------------------
+
+    data class PanelState(val visible: Boolean = false, val open: List<String> = emptyList(), val active: String? = null)
+
+    private val _panel = MutableStateFlow(PanelState())
+    val panel: StateFlow<PanelState> = _panel
+
+    fun togglePanel() = _panel.update { it.copy(visible = !it.visible) }
+    fun closePanel() = _panel.update { it.copy(visible = false) }
+    fun openTool(id: String) = _panel.update { it.copy(visible = true, open = if (id in it.open) it.open else it.open + id, active = id) }
+    fun showPicker() = _panel.update { it.copy(visible = true, active = null) }
+    fun closeTool(id: String) = _panel.update { st ->
+        val open = st.open - id
+        st.copy(open = open, active = if (st.active == id) open.lastOrNull() else st.active)
     }
 
     // ---- persistence -------------------------------------------------------------------

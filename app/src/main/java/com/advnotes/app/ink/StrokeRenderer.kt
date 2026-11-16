@@ -1,5 +1,6 @@
 package com.advnotes.app.ink
 
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
@@ -82,7 +83,12 @@ class StrokeRenderer(var pressureCurve: Float = 1f) {
 
     fun textHeight(t: TextBox): Float = layout(t).height.toFloat()
 
-    /** Draws a whole page (paper + highlighters underneath + ink + text). Canvas in page units. */
+    private val bmpPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+
+    /**
+     * Draws a whole page (paper, imported background, highlighters underneath, ink, text).
+     * Canvas in page units.
+     */
     fun drawPage(
         canvas: Canvas,
         page: Page,
@@ -90,8 +96,15 @@ class StrokeRenderer(var pressureCurve: Float = 1f) {
         color: PaperColor,
         exclude: Set<String> = emptySet(),
         drawPaper: Boolean = true,
+        background: Bitmap? = null,
     ) {
-        if (drawPaper) PaperRenderer.draw(canvas, page.paper ?: paper, color)
+        if (drawPaper) PaperRenderer.draw(canvas, page.paper ?: paper, color, page.height)
+        if (background != null) {
+            canvas.drawBitmap(
+                background, null,
+                android.graphics.RectF(0f, 0f, com.advnotes.app.model.PAGE_WIDTH, page.height), bmpPaint,
+            )
+        }
         for (s in page.strokes) if (s.kind == InkKind.HIGHLIGHTER && s.id !in exclude) draw(canvas, s)
         for (s in page.strokes) if (s.kind == InkKind.PEN && s.id !in exclude) draw(canvas, s)
         for (t in page.texts) if (t.id !in exclude) drawText(canvas, t)

@@ -1,0 +1,4 @@
+#pragma once
+#include "qtshim.h"
+// Only needed by the engine's command-line tests.
+class QCoreApplication { public: QCoreApplication(int &, char **) {} };

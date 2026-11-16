@@ -15,7 +15,6 @@ import android.view.View
 import com.advnotes.app.data.FingerMode
 import com.advnotes.app.data.PenButtonAction
 import com.advnotes.app.model.InkKind
-import com.advnotes.app.model.PAGE_HEIGHT
 import com.advnotes.app.model.PAGE_WIDTH
 import com.advnotes.app.model.Page
 import com.advnotes.app.model.PaperColor
@@ -101,6 +100,14 @@ class InkCanvasView(context: Context) : View(context) {
             field = value
         }
     var stylusSeen = false
+
+    /** Owning notebook, used to resolve imported page backgrounds. */
+    var notebookId: String = ""
+
+    private fun backgroundBitmap(): Bitmap? {
+        val bg = page.background ?: return null
+        return Backgrounds.get(notebookId, bg) { layerDirty = true; invalidate() }
+    }
 
     // ---- viewport: view = page * scale + (tx, ty) ----
     private var scale = 1f
@@ -189,7 +196,7 @@ class InkCanvasView(context: Context) : View(context) {
         val margin = 16f * density
         scale = (width - 2 * margin) / PAGE_WIDTH
         // On wide screens don't let the page get absurdly large: fit height if width-fit is >1.6x
-        val hScale = (height - 2 * margin) / PAGE_HEIGHT
+        val hScale = (height - 2 * margin) / page.height
         if (scale > hScale * 1.6f) scale = hScale * 1.6f
         tx = (width - PAGE_WIDTH * scale) / 2f
         ty = margin
@@ -202,7 +209,7 @@ class InkCanvasView(context: Context) : View(context) {
     }
 
     private fun clampViewport() {
-        val pw = PAGE_WIDTH * scale; val ph = PAGE_HEIGHT * scale
+        val pw = PAGE_WIDTH * scale; val ph = page.height * scale
         val m = 48f * density
         tx = if (pw + 2 * m <= width) (width - pw) / 2f else tx.coerceIn(width - pw - m, m)
         ty = if (ph + 2 * m <= height) ty.coerceIn(m, max(m, height - ph - m)) else ty.coerceIn(height - ph - m, m)
@@ -240,9 +247,9 @@ class InkCanvasView(context: Context) : View(context) {
         c.translate(tx, ty)
         c.scale(scale, scale)
         val sh = 3f / scale
-        c.drawRect(sh, sh * 2, PAGE_WIDTH + sh, PAGE_HEIGHT + sh * 2, shadowPaint)
-        c.clipRect(0f, 0f, PAGE_WIDTH, PAGE_HEIGHT)
-        renderer.drawPage(c, pageToDraw, paperStyle, paperColor, excluded())
+        c.drawRect(sh, sh * 2, PAGE_WIDTH + sh, page.height + sh * 2, shadowPaint)
+        c.clipRect(0f, 0f, PAGE_WIDTH, page.height)
+        renderer.drawPage(c, pageToDraw, paperStyle, paperColor, excluded(), background = backgroundBitmap())
         c.restore()
     }
 
@@ -263,7 +270,7 @@ class InkCanvasView(context: Context) : View(context) {
         canvas.save()
         canvas.translate(tx, ty)
         canvas.scale(scale, scale)
-        canvas.clipRect(0f, 0f, PAGE_WIDTH, PAGE_HEIGHT)
+        canvas.clipRect(0f, 0f, PAGE_WIDTH, page.height)
 
         // selected items, with the in-progress move/scale applied
         selection?.let { sel ->
@@ -724,7 +731,21 @@ class InkCanvasView(context: Context) : View(context) {
         val texts = page.texts.filter { t ->
             Geometry.pointInPolygon(t.x + t.width / 2, t.y + renderer.textHeight(t) / 2, poly)
         }
-        if (strokes.isEmpty() && texts.isEmpty()) return
+        if (strokes.isEmpty() && texts.isEmpty()) {
+            // On an imported page, circling printed content selects that region (for Solve / To text).
+            if (page.background != null) {
+                var l = Float.MAX_VALUE; var t = Float.MAX_VALUE; var r = -Float.MAX_VALUE; var b = -Float.MAX_VALUE
+                for (i in poly.indices step 2) {
+                    l = min(l, poly[i]); r = max(r, poly[i]); t = min(t, poly[i + 1]); b = max(b, poly[i + 1])
+                }
+                if (r - l > 10f && b - t > 10f) {
+                    selection = Selection(emptySet(), emptySet(), RectF(l, t, r, b))
+                    selDx = 0f; selDy = 0f; selScale = 1f
+                    notifySelection(); invalidate()
+                }
+            }
+            return
+        }
         setSelection(strokes.map { it.id }.toSet(), texts.map { it.id }.toSet())
     }
 
@@ -751,6 +772,7 @@ class InkCanvasView(context: Context) : View(context) {
     private fun applySelectionTransform() {
         val sel = selection ?: return
         if (selDx == 0f && selDy == 0f && selScale == 1f) return
+        if (sel.ids.isEmpty()) { selDx = 0f; selDy = 0f; selScale = 1f; return } // region selections don't move
         val ox = sel.bounds.left; val oy = sel.bounds.top
         val sc = selScale; val dx = selDx; val dy = selDy
         val strokes = page.strokes.map { s ->
@@ -823,10 +845,48 @@ class InkCanvasView(context: Context) : View(context) {
         c.drawColor(paperColor.argb)
         c.scale(s, s)
         c.translate(-b.left, -b.top)
-        val excluded = page.strokes.filter { it.id !in sel.strokeIds }.map { it.id }.toSet() +
-            page.texts.filter { it.id !in sel.textIds }.map { it.id }
-        renderer.drawPage(c, page, paperStyle, paperColor, excluded, drawPaper = false)
+        // A region selection (no ink) sends everything in the area; otherwise only the selected ink,
+        // on top of the imported page background if there is one.
+        val excluded = if (sel.ids.isEmpty()) emptySet() else
+            page.strokes.filter { it.id !in sel.strokeIds }.map { it.id }.toSet() + page.texts.filter { it.id !in sel.textIds }.map { it.id }
+        val bg = page.background?.let { Backgrounds.renderNow(notebookId, it) }
+        renderer.drawPage(c, page, paperStyle, paperColor, excluded, drawPaper = false, background = bg)
         return bmp
+    }
+
+    /** The part of the page currently on screen, in page units. */
+    fun visiblePageRect(): RectF = RectF(
+        toPageX(0f).coerceIn(0f, PAGE_WIDTH), toPageY(0f).coerceIn(0f, page.height),
+        toPageX(width.toFloat()).coerceIn(0f, PAGE_WIDTH), toPageY(height.toFloat()).coerceIn(0f, page.height),
+    )
+
+    /** Renders a region of the page (paper, background, ink) to a bitmap. */
+    fun regionBitmap(region: RectF, maxSide: Int = 1600): Bitmap? {
+        if (region.width() < 1f || region.height() < 1f) return null
+        val s = min(maxSide / max(region.width(), region.height()), 4f)
+        val bmp = Bitmap.createBitmap((region.width() * s).roundToInt().coerceAtLeast(1), (region.height() * s).roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.scale(s, s)
+        c.translate(-region.left, -region.top)
+        val bg = page.background?.let { Backgrounds.renderNow(notebookId, it) }
+        renderer.drawPage(c, page, paperStyle, paperColor, background = bg)
+        return bmp
+    }
+
+    /** Selected pen/highlighter strokes in drawing order (for handwriting recognition). */
+    fun selectedStrokes(): List<Stroke> {
+        val sel = selection ?: return emptyList()
+        return page.strokes.filter { it.id in sel.strokeIds }
+    }
+
+    /** Replaces the selected ink with a text box (used by handwriting → text). */
+    fun replaceSelectionWithText(text: String, size: Float) {
+        val sel = selection ?: return
+        val b = sel.bounds
+        val tb = TextBox(x = b.left, y = b.top, width = max(b.width(), 200f), text = text, size = size, color = 0xFF1A1A1A.toInt())
+        selection = null
+        commit(page.copy(strokes = page.strokes.filter { it.id !in sel.strokeIds }, texts = page.texts.filter { it.id !in sel.textIds } + tb))
+        listener?.onSelectionChanged(null)
     }
 
     private fun notifySelection() {

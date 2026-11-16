@@ -154,6 +154,8 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             DriveSection()
 
+            ToolsSection()
+
             Section("About") {
                 Text("Adv Notes ${BuildConfig.VERSION_NAME}")
                 Text(
@@ -511,5 +513,47 @@ private fun DriveSection() {
                 TextButton(onClick = { scope.launch { app.drive.disconnect() } }) { Text("Disconnect") }
             }
         }
+    }
+}
+
+@Composable
+private fun ToolsSection() {
+    val app = AdvNotesApp.instance
+    val tools by app.tools.tools.collectAsState()
+    val scope = rememberCoroutineScope()
+    var message by remember { mutableStateOf<String?>(null) }
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            message = try { "Installed " + app.tools.install(uri).name } catch (e: Exception) { "Couldn't install: ${e.message}" }
+        }
+    }
+    Section("Tools") {
+        Text(
+            "Tools open in the side panel next to a notebook (the ▦ button in the editor). Web tools are folders with a " +
+                "manifest.json and HTML/JS, packed as a .zip: see docs/TOOLS.md in the project to build or port one.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        tools.forEach { t ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+                Icon(t.icon, null)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(t.name)
+                    Text(
+                        when {
+                            t is com.advnotes.app.tools.WebTool && t.installed -> "Installed · v${t.manifest.version}" + if (t.manifest.author.isNotBlank()) " · ${t.manifest.author}" else ""
+                            t is com.advnotes.app.tools.WebTool -> "Built in (web)"
+                            else -> "Built in"
+                        },
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (t is com.advnotes.app.tools.WebTool && t.installed) {
+                    IconButton(onClick = { app.tools.uninstall(t.id) }) { Icon(Icons.Default.Delete, "Uninstall") }
+                }
+            }
+        }
+        OutlinedButton(onClick = { pick.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }) { Text("Install tool from .zip…") }
+        message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
 }

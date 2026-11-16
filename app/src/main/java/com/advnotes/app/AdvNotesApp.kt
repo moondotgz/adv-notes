@@ -20,6 +20,8 @@ class AdvNotesApp : Application(), Configuration.Provider {
     val chatGpt by lazy { ChatGptAuth(settings) }
     val local by lazy { LocalLlama(this, settings) }
     val downloads by lazy { ModelDownloads(local) }
+    val tools by lazy { com.advnotes.app.tools.ToolRegistry(this, com.advnotes.app.tools.BuiltinTools.all()) }
+    val importer by lazy { com.advnotes.app.importer.Importer(this, repo) }
 
     override fun onCreate() {
         super.onCreate()

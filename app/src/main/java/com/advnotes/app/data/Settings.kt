@@ -51,6 +51,9 @@ data class AppSettings(
     val driveAccount: String? = null,
     val localModel: String? = null,
     val localThreads: Int = 4,
+    /** Handwriting → text: language name (see Handwriting.LANGUAGES) and engine. */
+    val hwLanguage: String = "English",
+    val hwEngine: String = "ON_DEVICE",
 )
 
 /**
@@ -99,6 +102,8 @@ class SettingsStore(context: Context) {
         driveAccount = prefs.getString("driveAccount", null),
         localModel = prefs.getString("localModel", null),
         localThreads = prefs.getInt("localThreads", 4),
+        hwLanguage = prefs.getString("hwLanguage", null) ?: "English",
+        hwEngine = prefs.getString("hwEngine", null) ?: "ON_DEVICE",
     )
 
     fun update(block: (AppSettings) -> AppSettings) {
@@ -113,6 +118,8 @@ class SettingsStore(context: Context) {
             .putString("driveAccount", s.driveAccount)
             .putString("localModel", s.localModel)
             .putInt("localThreads", s.localThreads)
+            .putString("hwLanguage", s.hwLanguage)
+            .putString("hwEngine", s.hwEngine)
             .apply()
         _state.value = s
     }

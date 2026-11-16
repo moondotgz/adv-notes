@@ -32,6 +32,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 
 sealed interface SyncStatus {
@@ -105,11 +106,13 @@ class DriveSync(
         result
     }
 
-    private data class Remote(val fileId: String, val notebookId: String, val updatedAt: Long)
+    private data class Remote(val fileId: String, val notebookId: String, val updatedAt: Long, val asset: String? = null)
 
     private suspend fun doSync(token: String): String {
         val folder = folderId(token)
-        val remote = listRemote(token, folder).associateBy { it.notebookId }
+        val all = listRemote(token, folder)
+        val remote = all.filter { it.asset == null }.associateBy { it.notebookId }
+        val remoteAssets = all.filter { it.asset != null }
         repo.refresh()
         var state = repo.syncState()
         val remoteIds = state.remoteIds.toMutableMap()
@@ -119,6 +122,7 @@ class DriveSync(
         // 1. local deletions -> delete on Drive
         for (id in state.tombstones) {
             remote[id]?.let { deleteRemote(token, it.fileId); deleted++ }
+            remoteAssets.filter { it.notebookId == id }.forEach { deleteRemote(token, it.fileId) }
             remoteIds.remove(id); syncedAt.remove(id)
         }
         val remoteLive = remote.filterKeys { it !in state.tombstones }
@@ -165,6 +169,7 @@ class DriveSync(
 
         state = state.copy(remoteIds = remoteIds, syncedAt = syncedAt, tombstones = emptySet(), lastSync = System.currentTimeMillis())
         repo.updateSyncState { state }
+        syncAssets(token, folder, remoteAssets.filter { it.notebookId !in state.tombstones })
         return buildList {
             if (up > 0) add("$up uploaded")
             if (down > 0) add("$down downloaded")
@@ -216,9 +221,10 @@ class DriveSync(
             val o = Http.json.parseToJsonElement(call(token, Request.Builder().url(url))).jsonObject
             o["files"]?.jsonArray?.forEach { f ->
                 val fo = f.obj() ?: return@forEach
-                val props = fo["appProperties"].obj()
+                val props = fo["appProperties"].obj() ?: return@forEach
                 val nid = props?.get("notebookId").str() ?: return@forEach
-                out += Remote(fo["id"].str()!!, nid, props?.get("updatedAt").str()?.toLongOrNull() ?: 0L)
+                val asset = if (props["kind"].str() == "asset") props["asset"].str() else null
+                out += Remote(fo["id"].str()!!, nid, props["updatedAt"].str()?.toLongOrNull() ?: 0L, asset)
             }
             pageToken = o["nextPageToken"].str()
         } while (pageToken != null)
@@ -250,6 +256,53 @@ class DriveSync(
         else Request.Builder().url("$UPLOAD/files/$existing?uploadType=multipart&fields=id").patch(multipart)
         val resp = call(token, b)
         return Http.json.parseToJsonElement(resp).jsonObject["id"].str() ?: existing!!
+    }
+
+    /**
+     * Imported PDFs/images are immutable files named by UUID, so syncing them is just
+     * "upload what Drive lacks, download what this device lacks".
+     */
+    private suspend fun syncAssets(token: String, folder: String, remoteAssets: List<Remote>) {
+        val have = remoteAssets.map { it.notebookId to it.asset }.toSet()
+        for (nb in repo.loadAll()) {
+            val needed = nb.pages.mapNotNull { it.background?.asset }.distinct()
+            for (name in needed) {
+                val local = repo.assetFile(nb.id, name)
+                if (local.exists() && (nb.id to name) !in have) uploadAsset(token, folder, nb.id, local)
+            }
+            for (r in remoteAssets.filter { it.notebookId == nb.id && it.asset in needed }) {
+                val local = repo.assetFile(nb.id, r.asset!!)
+                if (!local.exists()) downloadTo(token, r.fileId, local)
+            }
+        }
+    }
+
+    private suspend fun uploadAsset(token: String, folder: String, notebookId: String, f: java.io.File) {
+        val meta = buildJsonObject {
+            put("name", "${f.name}.advnote-asset")
+            putJsonArray("parents") { add(folder) }
+            putJsonObject("appProperties") {
+                put("kind", "asset"); put("notebookId", notebookId); put("asset", f.name)
+            }
+        }
+        val multipart = MultipartBody.Builder().setType("multipart/related".toMediaType())
+            .addPart(meta.toString().toRequestBody(JSON))
+            .addPart(f.asRequestBody("application/octet-stream".toMediaType()))
+            .build()
+        call(token, Request.Builder().url("$UPLOAD/files?uploadType=multipart&fields=id").post(multipart))
+    }
+
+    private suspend fun downloadTo(token: String, fileId: String, dest: java.io.File) {
+        val r = Http.client.newCall(
+            Request.Builder().url("$API/files/$fileId?alt=media").header("Authorization", "Bearer $token").build()
+        ).await()
+        r.use {
+            if (!it.isSuccessful) throw AiException("Drive: " + errorMessage(it.code, it.body?.string().orEmpty()))
+            dest.parentFile?.mkdirs()
+            val tmp = java.io.File(dest.path + ".part")
+            it.body!!.byteStream().use { input -> tmp.outputStream().use { o -> input.copyTo(o) } }
+            tmp.renameTo(dest)
+        }
     }
 
     private suspend fun deleteRemote(token: String, fileId: String) {

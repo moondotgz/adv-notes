@@ -87,6 +87,13 @@ data class TextBox(
     fun translated(dx: Float, dy: Float) = copy(x = x + dx, y = y + dy)
 }
 
+/**
+ * An imported page image: [asset] is a file in the notebook's asset folder. For a PDF asset
+ * [pdfPage] is the 0-based page index; for an image it is -1.
+ */
+@Serializable
+data class PageBackground(val asset: String, val pdfPage: Int = -1)
+
 @Serializable
 data class Page(
     val id: String = newId(),
@@ -94,6 +101,9 @@ data class Page(
     val texts: List<TextBox> = emptyList(),
     /** Per-page override; null means use the notebook's paper style. */
     val paper: PaperStyle? = null,
+    /** Page height in page units; the width is always [PAGE_WIDTH]. Imported pages keep their aspect ratio. */
+    val height: Float = PAGE_HEIGHT,
+    val background: PageBackground? = null,
 )
 
 @Serializable
