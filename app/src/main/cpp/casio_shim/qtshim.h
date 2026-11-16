@@ -4,6 +4,7 @@
 #pragma once
 
 #include <algorithm>
+#include <clocale>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -19,6 +20,30 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+// The shim promises C-locale numbers like Qt, but printf/strtod follow the process locale. Android's libc is
+// always "C", yet a JVM on a host set to e.g. pt_BR switches to a decimal comma (this broke the host tests), so
+// convert explicitly in both directions.
+namespace qtshim_num {
+inline std::string decimalPoint() { const char *d = std::localeconv()->decimal_point; return (d && *d) ? d : "."; }
+// C-locale text ("1.5") -> what strtod expects right now. A locale-style separator ("1,5") isn't C syntax: reject it.
+inline std::string toLocalForm(std::string s) {
+    const std::string dp = decimalPoint();
+    if (dp == ".") return s;
+    if (s.find(dp) != std::string::npos) return "\x01";
+    size_t at = s.find('.');
+    if (at != std::string::npos) s.replace(at, 1, dp);
+    return s;
+}
+// printf output -> C-locale text
+inline std::string fromLocalForm(std::string s) {
+    const std::string dp = decimalPoint();
+    if (dp == ".") return s;
+    size_t at = s.find(dp);
+    if (at != std::string::npos) s.replace(at, dp.size(), ".");
+    return s;
+}
+} // namespace qtshim_num
 
 using qint8 = int8_t;
 using quint8 = uint8_t;
@@ -253,7 +278,7 @@ public:
 
     // Number parsing (C locale, like Qt)
     double toDouble(bool *ok = nullptr) const {
-        std::string s = trimmed().toStdString();
+        std::string s = qtshim_num::toLocalForm(trimmed().toStdString());
         char *end = nullptr;
         double v = s.empty() ? 0 : std::strtod(s.c_str(), &end);
         bool good = !s.empty() && end && *end == '\0';
@@ -297,7 +322,7 @@ public:
         std::snprintf(spec, sizeof spec, "%%.%d%c", prec < 0 ? 6 : prec, fmt);
         char buf[512];
         std::snprintf(buf, sizeof buf, spec, x);
-        return QString(buf);
+        return QString(qtshim_num::fromLocalForm(buf).c_str());
     }
     static QString number(float x, char fmt = 'g', int prec = 6) { return number(double(x), fmt, prec); }
     static QString number(long long v, int base = 10) {
