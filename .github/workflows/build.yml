@@ -60,4 +60,4 @@ jobs:
           gh release create "$TAG" "adv-notes-$TAG.apk" --target "$GITHUB_SHA" \
             --title "Adv Notes $VERSION" --generate-notes
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
