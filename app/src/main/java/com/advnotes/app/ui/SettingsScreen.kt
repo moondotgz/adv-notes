@@ -275,7 +275,7 @@ private fun ProviderConfig(p: ProviderType) {
             ProviderType.OPENROUTER -> "Any OpenRouter model that supports image input works."
             ProviderType.CUSTOM_OPENAI -> "Any server with an OpenAI-style /chat/completions endpoint: LM Studio, Ollama, llama.cpp server, vLLM, LiteLLM…"
             ProviderType.CUSTOM_ANTHROPIC -> "Any server that implements the Anthropic /v1/messages API."
-            ProviderType.CHATGPT -> "Uses your ChatGPT Plus/Pro plan through the same sign-in as the Codex CLI. This is not an official API and may stop working if OpenAI changes it."
+            ProviderType.CHATGPT -> "Unofficial workaround: signs in as the Codex CLI and uses its backend to bill your ChatGPT Plus/Pro plan. It is not OpenAI's approved \"Sign in with ChatGPT\" route for third-party apps, so it may stop working at any time, and any risk to your account is yours."
             ProviderType.LOCAL -> "Runs a small vision model fully on this device with llama.cpp. No internet needed after download; slower and less accurate than cloud models."
         }
         Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

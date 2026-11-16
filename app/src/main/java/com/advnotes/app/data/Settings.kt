@@ -21,7 +21,7 @@ enum class FingerMode(val label: String) {
 
 enum class ProviderType(val label: String, val needsKey: Boolean, val needsBaseUrl: Boolean) {
     OPENAI("OpenAI (API key)", true, false),
-    CHATGPT("ChatGPT subscription (sign in)", false, false),
+    CHATGPT("ChatGPT subscription (unofficial)", false, false),
     ANTHROPIC("Anthropic (API key)", true, false),
     OPENROUTER("OpenRouter", true, false),
     CUSTOM_OPENAI("Custom OpenAI-compatible", false, true),

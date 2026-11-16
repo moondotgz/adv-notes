@@ -31,7 +31,7 @@ A notebook-style handwriting app for Android, built for the S Pen, with an AI ma
 | Provider | Notes |
 |---|---|
 | OpenAI (API key) | Chat Completions with image input. Default `gpt-5`. |
-| ChatGPT subscription | "Sign in with ChatGPT" via the same OAuth flow as the open-source Codex CLI, using the Codex backend. **Unofficial**, so it may break if OpenAI changes it. |
+| ChatGPT subscription (**unofficial**) | A workaround: it signs in as the open-source Codex CLI (same OAuth client and headers) and uses the Codex backend. This is **not** OpenAI's approved "Sign in with ChatGPT" partner program, so it may stop working at any time and you use it at your own account's risk. Claude Pro/Max login is deliberately not offered: Anthropic's terms forbid using it in third-party apps and it is enforced, so use an Anthropic API key. |
 | Anthropic (API key) | Messages API, default `claude-opus-5-5`, with server-side refusal fallback enabled for models that support it. |
 | OpenRouter | Any vision model. |
 | Custom OpenAI-compatible | LM Studio, Ollama, llama.cpp server, vLLM, LiteLLM… (base URL + optional key) |
