@@ -46,8 +46,9 @@ object AiClients {
         ProviderType.LOCAL -> local
     }
 
-    /** Lists model ids from the provider's models endpoint, where one exists. */
-    suspend fun listModels(p: ProviderType, s: SettingsStore): List<String> {
+    /** Lists models from the provider's models endpoint, where one exists. */
+    suspend fun listModels(p: ProviderType, s: SettingsStore): List<ModelInfo> {
+        ModelCache.get(p, s)?.let { return it }
         val key = s.apiKey(p)
         val req = when (p) {
             ProviderType.OPENAI -> Request.Builder().url("https://api.openai.com/v1/models").header("Authorization", "Bearer $key")
@@ -57,22 +58,94 @@ object AiClients {
             }
             ProviderType.ANTHROPIC, ProviderType.CUSTOM_ANTHROPIC -> {
                 val base = if (p == ProviderType.ANTHROPIC) "https://api.anthropic.com" else s.baseUrl(p)
-                Request.Builder().url(AnthropicClient.endpoint(base, "models"))
+                Request.Builder().url(AnthropicClient.endpoint(base, "models") + "?limit=1000")
                     .header("x-api-key", key)
                     .header("anthropic-version", if (p == ProviderType.ANTHROPIC) AnthropicClient.VERSION else AnthropicClient.COMPAT_VERSION)
                     .apply { if (p == ProviderType.CUSTOM_ANTHROPIC && key.isNotBlank()) header("Authorization", "Bearer $key") }
             }
-            ProviderType.CHATGPT -> return ChatGptCodexClient.KNOWN_MODELS
+            ProviderType.CHATGPT -> return ChatGptCodexClient.KNOWN_MODELS.map { ModelInfo(it, it, vision = true) }
             ProviderType.LOCAL -> return emptyList()
         }.build()
         val resp = Http.client.newCall(req).await()
-        resp.use { r ->
+        val list = resp.use { r ->
             val body = r.body?.string().orEmpty()
             if (!r.isSuccessful) throw AiException(errorMessage(r.code, body))
             val arr = Http.json.parseToJsonElement(body).jsonObject["data"]?.jsonArray ?: JsonArray(emptyList())
-            return arr.mapNotNull { it.obj()?.get("id").str() }.sorted()
+            arr.mapNotNull { it.obj()?.let { o -> ModelInfo.parse(o) } }
+        }
+        ModelCache.put(p, s, list)
+        return list
+    }
+}
+
+/**
+ * A model offered by a provider. OpenRouter also reports what it accepts and what it costs;
+ * other providers only give the id (and Anthropic a display name).
+ */
+data class ModelInfo(
+    val id: String,
+    val name: String,
+    /** Accepts image input; null when the provider doesn't say. */
+    val vision: Boolean? = null,
+    val contextLength: Long? = null,
+    /** USD per million input / output tokens. */
+    val inputPerM: Double? = null,
+    val outputPerM: Double? = null,
+    /** Unix seconds; used for "newest" sorting. */
+    val created: Long = 0,
+    /** Routers (e.g. openrouter/auto) bill whatever model they pick. */
+    val variablePrice: Boolean = false,
+) {
+    val free get() = inputPerM == 0.0 && outputPerM == 0.0
+
+    /** "$0.04 / $0.18 per 1M tokens" or "Free". */
+    val priceLabel: String?
+        get() = when {
+            variablePrice -> "Price depends on the model it routes to"
+            inputPerM == null || outputPerM == null -> null
+            free -> "Free"
+            else -> "${usd(inputPerM)} in · ${usd(outputPerM)} out per 1M tokens"
+        }
+
+    val contextLabel: String?
+        get() = contextLength?.takeIf { it > 0 }?.let { if (it >= 1_000_000) "${"%.1f".format(it / 1e6).removeSuffix(".0")}M context" else "${it / 1000}k context" }
+
+    companion object {
+        private fun usd(v: Double) = when {
+            v >= 10 -> "$%.0f".format(v)
+            v >= 0.1 -> "$%.2f".format(v)
+            else -> "$%.3f".format(v)
+        }
+
+        fun parse(o: kotlinx.serialization.json.JsonObject): ModelInfo? {
+            val id = o["id"].str() ?: return null
+            val name = o["name"].str() ?: o["display_name"].str() ?: id
+            val arch = o["architecture"].obj()
+            val inputs = (arch?.get("input_modalities") as? JsonArray)?.mapNotNull { it.str() }
+            val pricing = o["pricing"].obj()
+            fun perM(k: String) = pricing?.get(k).str()?.toDoubleOrNull()?.takeIf { it >= 0 }?.times(1_000_000)
+            val created = (o["created"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull()
+                ?: o["created_at"].str()?.let { runCatching { java.time.Instant.parse(it).epochSecond }.getOrNull() } ?: 0L
+            return ModelInfo(
+                id = id,
+                name = name,
+                vision = inputs?.contains("image"),
+                contextLength = (o["context_length"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull(),
+                inputPerM = perM("prompt"),
+                outputPerM = perM("completion"),
+                created = created,
+                variablePrice = pricing?.get("prompt").str()?.toDoubleOrNull()?.let { it < 0 } == true,
+            )
         }
     }
+}
+
+/** Model lists change rarely; keep them for 30 minutes per provider/key/base URL. */
+private object ModelCache {
+    private val cache = HashMap<String, Pair<Long, List<ModelInfo>>>()
+    private fun key(p: ProviderType, s: SettingsStore) = "${p.name}|${s.baseUrl(p)}|${s.apiKey(p).hashCode()}"
+    @Synchronized fun get(p: ProviderType, s: SettingsStore) = cache[key(p, s)]?.takeIf { System.currentTimeMillis() - it.first < 30 * 60_000 }?.second
+    @Synchronized fun put(p: ProviderType, s: SettingsStore, l: List<ModelInfo>) { cache[key(p, s)] = System.currentTimeMillis() to l }
 }
 
 private fun ByteArray.b64() = Base64.encodeToString(this, Base64.NO_WRAP)

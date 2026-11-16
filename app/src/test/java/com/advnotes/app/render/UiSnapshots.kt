@@ -286,6 +286,20 @@ class UiSnapshots {
         rule.onNode(androidx.compose.ui.test.hasText("Download") and androidx.compose.ui.test.hasClickAction(), useUnmergedTree = false).assertIsEnabled()
     }
 
+    @Test fun openRouterModelPicker() {
+        AdvNotesApp.instance.settings.update { it.copy(provider = com.advnotes.app.data.ProviderType.OPENROUTER) }
+        rule.onNodeWithContentDescriptionCompat("Settings")
+        rule.onAllNodesWithText("Model", useUnmergedTree = true)[0].performScrollTo()
+        snap("23a_model_field")
+        rule.onAllNodesWithText("Model", useUnmergedTree = true)[0].performClick()
+        rule.waitUntil(30_000) { rule.onAllNodesWithText("per 1M tokens", substring = true, useUnmergedTree = true).fetchSemanticsNodes().size > 3 }
+        rule.waitForIdle()
+        snap("23_model_picker")
+        rule.onNode(androidx.compose.ui.test.hasSetTextAction() and androidx.compose.ui.test.hasText("Search, or type a model id", substring = true)).performTextInput("claude")
+        rule.waitForIdle()
+        snap("24_model_picker_search")
+    }
+
     private fun androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>.onNodeWithContentDescriptionCompat(desc: String) {
         onNode(androidx.compose.ui.test.hasContentDescription(desc)).performClick()
         waitForIdle()

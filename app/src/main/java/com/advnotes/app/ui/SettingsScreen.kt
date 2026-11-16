@@ -257,38 +257,11 @@ private fun ProviderConfig(p: ProviderType) {
         if (p.needsKey || p.needsBaseUrl) {
             SecretField(if (p.needsBaseUrl) "API key (optional)" else "API key", st.apiKey(p)) { st.setApiKey(p, it) }
         }
-        if (p != ProviderType.LOCAL) {
-            var model by remember { mutableStateOf(st.model(p)) }
-            var options by remember { mutableStateOf<List<String>>(emptyList()) }
-            var loading by remember { mutableStateOf(false) }
-            var error by remember { mutableStateOf<String?>(null) }
-            Box {
-                OutlinedTextField(
-                    model, { model = it; st.setModel(p, it) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Model (must accept images)") },
-                    trailingIcon = {
-                        if (loading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        else IconButton(onClick = {
-                            loading = true; error = null
-                            scope.launch {
-                                try { options = AiClients.listModels(p, st) } catch (e: Exception) { error = e.message }
-                                loading = false
-                            }
-                        }) { Icon(Icons.Default.Refresh, "Load model list") }
-                    },
-                )
-                DropdownMenu(options.isNotEmpty(), { options = emptyList() }, Modifier.widthIn(max = 420.dp).height(360.dp)) {
-                    options.forEach { m ->
-                        DropdownMenuItem(text = { Text(m) }, onClick = { model = m; st.setModel(p, m); options = emptyList() })
-                    }
-                }
-            }
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-        }
+        if (p != ProviderType.LOCAL) ModelPicker(p, st)
         val note = when (p) {
             ProviderType.OPENAI -> "Uses the Chat Completions API with your platform.openai.com key."
             ProviderType.ANTHROPIC -> "Uses the Claude Messages API with your console.anthropic.com key."
-            ProviderType.OPENROUTER -> "Any OpenRouter model that supports image input works."
+            ProviderType.OPENROUTER -> "Pick any model that reads images. Prices are per million tokens; a solve is usually a few thousand tokens."
             ProviderType.CUSTOM_OPENAI -> "Any server with an OpenAI-style /chat/completions endpoint: LM Studio, Ollama, llama.cpp server, vLLM, LiteLLM…"
             ProviderType.CUSTOM_ANTHROPIC -> "Any server that implements the Anthropic /v1/messages API."
             ProviderType.CHATGPT -> "Unofficial workaround: signs in as the Codex CLI and uses its backend to bill your ChatGPT Plus/Pro plan. It is not OpenAI's approved \"Sign in with ChatGPT\" route for third-party apps, so it may stop working at any time, and any risk to your account is yours."
