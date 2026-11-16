@@ -26,6 +26,8 @@ class AdvNotesApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // Lets chrome://inspect (or adb) attach to web tools in debug builds.
+        if (BuildConfig.DEBUG) android.webkit.WebView.setWebContentsDebuggingEnabled(true)
         repo = NotebookRepository(this)
         settings = SettingsStore(this)
         drive = DriveSync(this, repo, settings)

@@ -80,13 +80,32 @@ class WebTool(
                     .addPathHandler("/tooldata/", ToolFiles.Directory(File(files, "tooldata").apply { mkdirs() }))
                     .build()
                 WebView(ctx).apply {
+                    // Without explicit params the WebView gets wrap_content, and Chromium then lays pages out
+                    // against a zero-height viewport (height:100% / 100vh collapse to 0).
+                    layoutParams = android.view.ViewGroup.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     settings.allowFileAccess = false
                     settings.allowContentAccess = false
                     webViewClient = object : WebViewClient() {
-                        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                            loader.shouldInterceptRequest(request.url)
+                        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                            val r = loader.shouldInterceptRequest(request.url)
+                            if (request.url.host == "appassets.androidplatform.net") {
+                                val range = request.requestHeaders["Range"]?.let { " Range: $it" }.orEmpty()
+                                ToolLog.add(manifest.id, "${request.method} ${request.url.path}$range -> ${if (r == null) "NOT FOUND" else r.mimeType}")
+                            }
+                            return r
+                        }
+
+                        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
+                            ToolLog.add(manifest.id, "load error ${error.errorCode} ${error.description} for ${request.url}")
+                        }
+
+                        override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                            ToolLog.add(manifest.id, "RENDERER ${if (detail.didCrash()) "CRASHED" else "was killed (probably out of memory)"}; reopen the tool")
+                            return true
+                        }
 
                         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                             // Keep tools inside their sandbox; open other links in the browser.
@@ -102,6 +121,7 @@ class WebTool(
                     webChromeClient = object : android.webkit.WebChromeClient() {
                         override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
                             android.util.Log.d("WebTool/${manifest.id}", "${m.message()} (${m.sourceId()}:${m.lineNumber()})")
+                            ToolLog.add(manifest.id, "js ${m.messageLevel().name.lowercase()}: ${m.message()} (${m.sourceId().substringAfterLast('/')}:${m.lineNumber()})")
                             return true
                         }
                     }
@@ -111,6 +131,7 @@ class WebTool(
                     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                         WebViewCompat.addDocumentStartJavaScript(this, shim, setOf("https://appassets.androidplatform.net"))
                     }
+                    ToolLog.add(manifest.id, "opening $basePath${manifest.entry} (WebView ${WebViewCompat.getCurrentWebViewPackage(ctx)?.versionName ?: "?"})")
                     loadUrl("https://appassets.androidplatform.net$basePath${manifest.entry}")
                 }
             },
@@ -142,7 +163,7 @@ class WebTool(
         private fun decodeDataUrl(s: String): ByteArray? =
             s.substringAfter("base64,", "").takeIf { it.isNotEmpty() }?.let { Base64.decode(it, Base64.DEFAULT) }
 
-        private fun js(code: String) = main.post { web.evaluateJavascript(code, null) }
+        private fun js(code: String) = main.post { web.evaluateJavascript(code) { ToolLog.add(host.toolId, "eval ${code.take(40)} -> $it") } }
         private fun resolve(id: Int, ok: Boolean, payloadJson: String) = js("AdvNotes._resolve($id, $ok, $payloadJson)")
         private fun quote(s: String) = JsonPrimitive(s).toString()
 
@@ -157,6 +178,7 @@ class WebTool(
 
         @JavascriptInterface
         fun request(id: Int, method: String, argsJson: String) {
+            ToolLog.add(host.toolId, "bridge #$id $method ${argsJson.take(80)}")
             scope.launch {
                 try {
                     val args = com.advnotes.app.ai.Http.json.parseToJsonElement(argsJson).jsonObject
@@ -197,10 +219,13 @@ class WebTool(
                         }
                         else -> throw IllegalArgumentException("Unknown method $method")
                     }
+                    ToolLog.add(host.toolId, "bridge #$id $method ok (${result.length} chars)")
                     resolve(id, true, result)
                 } catch (e: kotlinx.coroutines.CancellationException) {
+                    ToolLog.add(host.toolId, "bridge #$id $method cancelled")
                     throw e
                 } catch (e: Exception) {
+                    ToolLog.add(host.toolId, "bridge #$id $method FAILED: ${e.message ?: e}\n" + e.stackTraceToString().lines().take(8).joinToString("\n"))
                     resolve(id, false, quote(e.message ?: e.toString()))
                 }
             }
@@ -223,7 +248,9 @@ class WebTool(
                 if (c.moveToFirst()) c.getString(0) else null
             }?.let { File(it).name }?.ifBlank { null } ?: "file-${System.currentTimeMillis()}"
             val dest = File(filesDir(), name)
-            ctx.contentResolver.openInputStream(uri)!!.use { i -> dest.outputStream().use { i.copyTo(it) } }
+            val input = ctx.contentResolver.openInputStream(uri)
+                ?: throw java.io.IOException("Couldn't read the picked file ($uri)")
+            input.use { i -> dest.outputStream().use { i.copyTo(it) } }
             buildJsonObject { put("name", name); put("url", urlFor(name)) }.toString()
         }
     }

@@ -16,6 +16,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -25,7 +30,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material3.HorizontalDivider
@@ -59,6 +69,8 @@ fun ToolPanel(
     modifier: Modifier = Modifier,
     grip: (@Composable () -> Unit)? = null,
 ) {
+    var logFor by remember { mutableStateOf<String?>(null) }
+    logFor?.let { ToolLogDialog(it) { logFor = null } }
     Surface(modifier, tonalElevation = 2.dp, shadowElevation = 4.dp) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
@@ -76,6 +88,7 @@ fun ToolPanel(
                     }
                     IconButton(onClick = onPicker) { Icon(Icons.Default.Add, "Open a tool") }
                     state.active?.let { id -> tools.firstOrNull { it.id == id } }?.let { t ->
+                        if (t is WebTool) IconButton(onClick = { logFor = t.id }) { Icon(Icons.Default.BugReport, "Tool log") }
                         IconButton(onClick = { onCloseTool(t.id) }) { Icon(Icons.Default.Close, "Close ${t.name}") }
                     }
                 }
@@ -136,3 +149,33 @@ private fun ToolPicker(tools: List<NotebookTool>, onOpen: (String) -> Unit) {
     }
 }
 
+
+@Composable
+private fun ToolLogDialog(toolId: String, onDismiss: () -> Unit) {
+    val version by ToolLog.version.collectAsState()
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val text = remember(version) { ToolLog.text(toolId) }
+    val scroll = rememberScrollState()
+    androidx.compose.runtime.LaunchedEffect(version) { scroll.scrollTo(scroll.maxValue) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Tool log") },
+        text = {
+            Box(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(scroll)) {
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    Text(
+                        text.ifBlank { "Nothing logged yet." },
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 11.sp),
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(text)) }) { Text("Copy") }
+                TextButton(onClick = { ToolLog.clear(toolId) }) { Text("Clear") }
+            }
+        },
+    )
+}
