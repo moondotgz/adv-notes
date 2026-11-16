@@ -86,7 +86,12 @@ import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LibraryScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
+fun LibraryScreen(
+    onOpen: (String) -> Unit,
+    onSettings: () -> Unit,
+    sharedPdf: android.net.Uri? = null,
+    onShareConsumed: () -> Unit = {},
+) {
     val app = AdvNotesApp.instance
     val notebooks by app.repo.summaries.collectAsState()
     val sync by app.drive.status.collectAsState()
@@ -112,6 +117,24 @@ fun LibraryScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
             } catch (e: Exception) {
                 importing = false
                 snackbar.showSnackbar(e.message ?: "Import failed")
+            }
+        }
+    }
+
+    LaunchedEffect(sharedPdf) {
+        if (sharedPdf != null) {
+            importing = true
+            try {
+                val result = app.importer.import(listOf(sharedPdf))
+                onShareConsumed()
+                onOpen(result.notebook.id)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onShareConsumed()
+                snackbar.showSnackbar(e.message ?: "Import failed")
+            } finally {
+                importing = false
             }
         }
     }

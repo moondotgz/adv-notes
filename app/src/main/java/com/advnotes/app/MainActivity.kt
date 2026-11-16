@@ -28,6 +28,8 @@ class MainActivity : ComponentActivity() {
                             LibraryScreen(
                                 onOpen = { id -> nav.navigate("editor/$id") },
                                 onSettings = { nav.navigate("settings") },
+                                sharedPdf = if (intent.action == android.content.Intent.ACTION_SEND && intent.type == "application/pdf") androidx.core.content.IntentCompat.getParcelableExtra(intent, android.content.Intent.EXTRA_STREAM, android.net.Uri::class.java) else null,
+                                onShareConsumed = { intent = android.content.Intent() },
                             )
                         }
                         composable("editor/{id}") { entry ->
