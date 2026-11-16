@@ -79,15 +79,6 @@ git clone --recursive <repo>      # llama.cpp and the casio calculator engine ar
 - The release build is signed with the debug key so it installs directly. Add your own signing config before publishing.
 - CI (`.github/workflows/build.yml`) runs the unit tests and uploads the release APK as an artifact on every push.
 
-### Google Drive setup (one-time, needed for sync)
-
-Google only issues Drive tokens to registered apps:
-
-1. In Google Cloud Console, create a project and enable the **Google Drive API**.
-2. Configure the OAuth consent screen (External, add yourself as a test user) and add the scope `.../auth/drive.file`.
-3. Create an OAuth client ID of type **Android** with package `com.advnotes.app` and the SHA-1 of the key that signs your APK (`./gradlew signingReport`; debug key by default).
-4. Install the APK signed with that key. *Settings → Connect Google Drive* will then work. No client ID goes into the code.
-
 ## Tests
 
 ```bash
