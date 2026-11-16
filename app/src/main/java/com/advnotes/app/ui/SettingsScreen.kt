@@ -19,12 +19,28 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Draw
+import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
@@ -90,11 +106,16 @@ import java.util.Date
 fun SettingsScreen(onBack: () -> Unit) {
     val app = AdvNotesApp.instance
     val s by app.settings.state.collectAsState()
+    val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(
+            LargeTopAppBar(
                 title = { Text("Settings") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                scrollBehavior = scroll,
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
         },
     ) { pad ->
@@ -103,65 +124,54 @@ fun SettingsScreen(onBack: () -> Unit) {
                 .padding(pad)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .wrapContentWidth(Alignment.CenterHorizontally)
+                .widthIn(max = 760.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            Section("Pen & touch") {
-                Text("Finger input", style = MaterialTheme.typography.labelLarge)
-                FingerMode.entries.forEach { m ->
-                    RadioRow(m.label, s.fingerMode == m) { app.settings.update { it.copy(fingerMode = m) } }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text("While holding the S Pen side button", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PenButtonAction.entries.forEach { a ->
-                        FilterChip(s.penButton == a, { app.settings.update { it.copy(penButton = a) } }, label = { Text(a.label) })
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text("Pressure response", style = MaterialTheme.typography.labelLarge)
+            SettingsGroup("Pen & touch", Icons.Default.Draw) {
+                FieldLabel("Finger input", s.fingerMode.label)
+                Segmented(
+                    listOf(FingerMode.AUTO to "Auto", FingerMode.NAVIGATE to "Scroll only", FingerMode.DRAW to "Draw"),
+                    s.fingerMode, { m -> app.settings.update { it.copy(fingerMode = m) } },
+                )
+                FieldLabel("S Pen side button", "What the pen does while you hold its button")
+                Segmented(PenButtonAction.entries.map { it to it.label }, s.penButton, { a -> app.settings.update { it.copy(penButton = a) } })
+                FieldLabel("Pressure response", "Light: thick lines with little pressure. Firm: press harder for thick lines.")
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Light", style = MaterialTheme.typography.bodySmall)
+                    Text("Light", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Slider(
                         s.pressureCurve, { v -> app.settings.update { it.copy(pressureCurve = v) } },
-                        valueRange = 0.4f..2.5f, modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                        valueRange = 0.4f..2.5f, modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
                     )
-                    Text("Firm", style = MaterialTheme.typography.bodySmall)
-                }
-                Text(
-                    "Light: thick lines with little pressure. Firm: you need to press harder for thick lines.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text("Toolbar position (or drag the ⠿ handle on the toolbar)", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("TOP" to "Top", "BOTTOM" to "Bottom", "LEFT" to "Left", "RIGHT" to "Right").forEach { (k, l) ->
-                        FilterChip(s.toolbarDock == k, { app.settings.update { it.copy(toolbarDock = k) } }, label = { Text(l) })
-                    }
-                }
-                Text("Tools panel side on tablets", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("LEFT" to "Left", "RIGHT" to "Right").forEach { (k, l) ->
-                        FilterChip(s.panelSide == k, { app.settings.update { it.copy(panelSide = k) } }, label = { Text(l) })
-                    }
+                    Text("Firm", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 SwitchRow("Hold to snap shapes", "Keep the pen still at the end of a stroke to turn it into a straight line or clean shape.", s.holdToShape) { v ->
                     app.settings.update { it.copy(holdToShape = v) }
                 }
             }
 
-            Section("AI math solver") {
+            SettingsGroup("Layout", Icons.Default.Dashboard) {
+                FieldLabel("Toolbar position", "You can also drag the ⠿ handle on the toolbar to an edge.")
+                Segmented(listOf("TOP" to "Top", "BOTTOM" to "Bottom", "LEFT" to "Left", "RIGHT" to "Right"), s.toolbarDock,
+                    { k -> app.settings.update { it.copy(toolbarDock = k) } })
+                FieldLabel("Tools panel on tablets")
+                Segmented(listOf("LEFT" to "Left side", "RIGHT" to "Right side"), s.panelSide, { k -> app.settings.update { it.copy(panelSide = k) } })
+            }
+
+            SettingsGroup("AI", Icons.Default.AutoAwesome) {
                 Text(
-                    "Select handwriting with the lasso and tap Solve. The selected area is sent as an image to the provider below.",
+                    "Used by Solve, To text and the AI chat. Lassoed handwriting is sent as an image to the provider you pick.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 ProviderType.entries.forEach { p ->
                     val unavailable = p == ProviderType.LOCAL && !BuildConfig.HAS_LLAMA
-                    RadioRow(p.label + if (unavailable) " — not in this build" else "", s.provider == p, enabled = !unavailable) {
-                        app.settings.update { it.copy(provider = p) }
-                    }
+                    ChoiceRow(
+                        providerIcon(p), p.label, providerBlurb(p) + if (unavailable) " Not included in this build." else "",
+                        selected = s.provider == p, enabled = !unavailable,
+                    ) { app.settings.update { it.copy(provider = p) } }
                 }
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 key(s.provider) { ProviderConfig(s.provider) }
                 TestButton(s.provider)
             }
@@ -170,33 +180,50 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             ToolsSection()
 
-            Section("About") {
-                Text("Adv Notes ${BuildConfig.VERSION_NAME}")
+            SettingsGroup("About", Icons.Default.Info) {
+                Text("Adv Notes ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyLarge)
                 Text(
                     "Notebooks are stored on this device. API keys and sign-in tokens are encrypted with the Android Keystore " +
                         "and only sent to the provider you choose.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
 
+private fun providerIcon(p: ProviderType) = when (p) {
+    ProviderType.OPENAI, ProviderType.CHATGPT -> Icons.Default.Bolt
+    ProviderType.ANTHROPIC -> Icons.Default.AutoAwesome
+    ProviderType.OPENROUTER -> Icons.Default.Hub
+    ProviderType.CUSTOM_OPENAI, ProviderType.CUSTOM_ANTHROPIC -> Icons.Default.Dns
+    ProviderType.LOCAL -> Icons.Default.PhoneAndroid
+}
+
+private fun providerBlurb(p: ProviderType) = when (p) {
+    ProviderType.OPENAI -> "GPT models with your OpenAI API key."
+    ProviderType.CHATGPT -> "Your ChatGPT Plus/Pro plan, via the Codex sign-in. Unofficial."
+    ProviderType.ANTHROPIC -> "Claude models with your Anthropic API key."
+    ProviderType.OPENROUTER -> "Hundreds of models with one key, with prices shown."
+    ProviderType.CUSTOM_OPENAI -> "Your own server: LM Studio, Ollama, vLLM, LiteLLM…"
+    ProviderType.CUSTOM_ANTHROPIC -> "Any server speaking the Anthropic Messages API."
+    ProviderType.LOCAL -> "Runs on this device with llama.cpp. Offline, slower."
+}
+
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(4.dp))
-            content()
-        }
+    val icon = when (title) {
+        "Tools" -> Icons.Default.Widgets
+        else -> Icons.Default.Cloud
     }
+    SettingsGroup(title, icon) { content() }
 }
 
 @Composable
 private fun RadioRow(label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().selectable(selected, enabled = enabled, onClick = onClick).padding(vertical = 2.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).selectable(selected, enabled = enabled, onClick = onClick).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected, onClick, enabled = enabled)
@@ -206,9 +233,9 @@ private fun RadioRow(label: String, selected: Boolean, enabled: Boolean = true, 
 
 @Composable
 private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title)
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked, onChange)

@@ -24,6 +24,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
@@ -127,74 +135,89 @@ fun LibraryScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
         }
     }
 
+    var query by remember { mutableStateOf("") }
+    var byName by remember { mutableStateOf(false) }
+    val shown = remember(notebooks, query, byName) {
+        notebooks.filter { query.isBlank() || it.title.contains(query.trim(), ignoreCase = true) }
+            .let { l -> if (byName) l.sortedBy { it.title.lowercase() } else l.sortedByDescending { it.updatedAt } }
+    }
+
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Notebooks", fontWeight = FontWeight.SemiBold) },
-                actions = {
-                    if (settings.driveAccount != null) {
-                        IconButton(onClick = { scope.launch { app.drive.sync() } }, enabled = sync !is SyncStatus.Running) {
-                            when (sync) {
-                                SyncStatus.Running -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                                is SyncStatus.Done -> Icon(Icons.Default.CloudDone, "Synced")
-                                is SyncStatus.Error, SyncStatus.NeedsSignIn -> Icon(Icons.Default.CloudOff, "Sync problem")
-                                SyncStatus.Idle -> Icon(Icons.Default.CloudSync, "Sync now")
-                            }
-                        }
-                    } else {
-                        IconButton(onClick = onSettings) { Icon(Icons.Default.Cloud, "Set up Google Drive") }
-                    }
-                    IconButton(onClick = { importLauncher.launch(arrayOf("*/*")) }) {
-                        Icon(Icons.Default.FileOpen, "Import (PDF, images, Samsung Notes, Xournal++)")
-                    }
-                    IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Settings") }
-                },
-            )
-        },
+        containerColor = MaterialTheme.colorScheme.surface,
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { creating = true },
                 icon = { Icon(Icons.Default.Add, null) },
                 text = { Text("New notebook") },
+                shape = MaterialTheme.shapes.large,
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { pad ->
-        if (notebooks.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("No notebooks yet", style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Tap “New notebook” to start writing, or import a PDF,\nimages, a Samsung Notes or a Xournal++ file.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    )
-                }
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(150.dp),
-                modifier = Modifier.fillMaxSize().padding(pad),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-            ) {
-                items(notebooks, key = { it.id }) { nb ->
-                    NotebookCard(
-                        nb,
-                        onClick = { onOpen(nb.id) },
-                        onEdit = { editing = nb },
-                        onExport = {
-                            scope.launch {
-                                app.repo.load(nb.id)?.let {
-                                    PdfExporter.share(ctx, PdfExporter.export(ctx, it, settings.pressureCurve))
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(164.dp),
+            modifier = Modifier.fillMaxSize().padding(pad),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp, 8.dp, 20.dp, 112.dp),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp),
+        ) {
+            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Notebooks", style = MaterialTheme.typography.headlineMedium)
+                            Text(
+                                when {
+                                    notebooks.isEmpty() -> "Nothing here yet"
+                                    else -> "${notebooks.size} notebook${if (notebooks.size == 1) "" else "s"}" +
+                                        ((sync as? SyncStatus.Done)?.let { " · synced " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it.at)) } ?: "")
+                                },
+                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        FilledTonalIconButton(onClick = { importLauncher.launch(arrayOf("*/*")) }) {
+                            Icon(Icons.Default.FileOpen, "Import (PDF, images, Samsung Notes, Xournal++)")
+                        }
+                        if (settings.driveAccount != null) {
+                            FilledTonalIconButton(onClick = { scope.launch { app.drive.sync() } }, enabled = sync !is SyncStatus.Running) {
+                                when (sync) {
+                                    SyncStatus.Running -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                                    is SyncStatus.Done -> Icon(Icons.Default.CloudDone, "Synced")
+                                    is SyncStatus.Error, SyncStatus.NeedsSignIn -> Icon(Icons.Default.CloudOff, "Sync problem")
+                                    SyncStatus.Idle -> Icon(Icons.Default.CloudSync, "Sync now")
                                 }
                             }
-                        },
-                        onDelete = { deleting = nb },
-                    )
+                        }
+                        FilledTonalIconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Settings") }
+                    }
+                    if (notebooks.isNotEmpty()) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            SearchPill(query, { query = it }, Modifier.weight(1f))
+                            FilterChip(!byName, { byName = false }, label = { Text("Recent") })
+                            FilterChip(byName, { byName = true }, label = { Text("A–Z") })
+                        }
+                    }
                 }
+            }
+            if (notebooks.isEmpty()) {
+                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                    EmptyLibrary(onNew = { creating = true }, onImport = { importLauncher.launch(arrayOf("*/*")) })
+                }
+            }
+            items(shown, key = { it.id }) { nb ->
+                NotebookCard(
+                    nb,
+                    onClick = { onOpen(nb.id) },
+                    onEdit = { editing = nb },
+                    onExport = {
+                        scope.launch {
+                            app.repo.load(nb.id)?.let {
+                                PdfExporter.share(ctx, PdfExporter.export(ctx, it, settings.pressureCurve))
+                            }
+                        }
+                    },
+                    onDelete = { deleting = nb },
+                )
             }
         }
     }
@@ -239,22 +262,37 @@ fun LibraryScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
 @Composable
 private fun NotebookCard(nb: NotebookSummary, onClick: () -> Unit, onEdit: () -> Unit, onExport: () -> Unit, onDelete: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
-    Column(Modifier.combinedClickable(onClick = onClick, onLongClick = { menu = true })) {
+    val base = nb.cover
+    val light = Color(androidx.core.graphics.ColorUtils.blendARGB(base, 0xFFFFFFFF.toInt(), 0.18f))
+    val dark = Color(androidx.core.graphics.ColorUtils.blendARGB(base, 0xFF000000.toInt(), 0.28f))
+    Column(Modifier.clip(MaterialTheme.shapes.large).combinedClickable(onClick = onClick, onLongClick = { menu = true })) {
         Box {
-            Card(
-                shape = RoundedCornerShape(topStart = 4.dp, bottomStart = 4.dp, topEnd = 14.dp, bottomEnd = 14.dp),
-                modifier = Modifier
+            Box(
+                Modifier
                     .fillMaxWidth()
-                    .aspectRatio(0.75f),
+                    .aspectRatio(0.78f)
+                    .shadow(6.dp, RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp, topEnd = 22.dp, bottomEnd = 22.dp))
+                    .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp, topEnd = 22.dp, bottomEnd = 22.dp))
+                    .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(light, Color(base), dark))),
             ) {
-                Box(Modifier.fillMaxSize().background(Color(nb.cover))) {
-                    // spine
-                    Box(Modifier.fillMaxSize().padding(start = 10.dp).width(2.dp).background(Color(0x33000000)))
-                    PaperPreview(
-                        nb.paper, nb.paperColor,
-                        Modifier.align(Alignment.Center).fillMaxWidth(0.62f).aspectRatio(1.2f),
-                        zoom = 3f,
-                    )
+                // spine
+                Box(Modifier.fillMaxHeight().width(14.dp).background(Color(0x22000000)))
+                Box(Modifier.fillMaxHeight().padding(start = 14.dp).width(1.dp).background(Color(0x33FFFFFF)))
+                // paper label
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    shadowElevation = 2.dp,
+                    color = Color(nb.paperColor.argb),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 22.dp, start = 26.dp, end = 14.dp)
+                        .fillMaxWidth().aspectRatio(1.35f),
+                ) { PaperPreview(nb.paper, nb.paperColor, Modifier.fillMaxSize(), zoom = 3f) }
+                Text(
+                    "${nb.pageCount} page${if (nb.pageCount == 1) "" else "s"}",
+                    style = MaterialTheme.typography.labelMedium, color = Color(0xEEFFFFFF),
+                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 24.dp, bottom = 12.dp),
+                )
+                IconButton(onClick = { menu = true }, modifier = Modifier.align(Alignment.BottomEnd)) {
+                    Icon(Icons.Default.MoreVert, "More", tint = Color(0xEEFFFFFF))
                 }
             }
             DropdownMenu(menu, onDismissRequest = { menu = false }) {
@@ -263,14 +301,58 @@ private fun NotebookCard(nb: NotebookSummary, onClick: () -> Unit, onEdit: () ->
                 DropdownMenuItem(text = { Text("Delete") }, onClick = { menu = false; onDelete() })
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Text(nb.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(10.dp))
+        Text(nb.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 4.dp))
         Text(
-            "${nb.pageCount} page${if (nb.pageCount == 1) "" else "s"} · " +
-                DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(nb.updatedAt)),
+            DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(nb.updatedAt)),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
         )
+    }
+}
+
+@Composable
+private fun SearchPill(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = modifier.height(48.dp)) {
+        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(10.dp))
+            Box(Modifier.weight(1f)) {
+                if (value.isEmpty()) Text("Search notebooks", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                androidx.compose.foundation.text.BasicTextField(
+                    value, onChange, singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (value.isNotEmpty()) IconButton(onClick = { onChange("") }) { Icon(Icons.Default.Close, "Clear search") }
+        }
+    }
+}
+
+@Composable
+private fun EmptyLibrary(onNew: () -> Unit, onImport: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(top = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier.size(112.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.AutoMirrored.Filled.MenuBook, null, Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+        Spacer(Modifier.height(20.dp))
+        Text("Start your first notebook", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Write with your S Pen on grid, Oxford or plain paper — or bring in a PDF, images,\na Samsung Notes or a Xournal++ file.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            androidx.compose.material3.Button(onClick = onNew) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("New notebook") }
+            androidx.compose.material3.OutlinedButton(onClick = onImport) { Icon(Icons.Default.FileOpen, null); Spacer(Modifier.width(8.dp)); Text("Import") }
+        }
     }
 }
 

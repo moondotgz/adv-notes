@@ -86,6 +86,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -267,6 +268,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
         },
     ) { pad ->
         val dock = runCatching { Dock.valueOf(settings.toolbarDock) }.getOrDefault(Dock.TOP)
+        val deskColor = MaterialTheme.colorScheme.surfaceContainer.toArgb()
         val panelLeft = settings.panelSide == "LEFT"
         var area by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
         var dragAt by remember { mutableStateOf<Offset?>(null) }      // toolbar being dragged
@@ -298,9 +300,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
         }
         Box(Modifier.padding(pad).fillMaxSize().onGloballyPositioned { area = it.boundsInRoot() }) {
         Column(Modifier.fillMaxSize()) {
-            if (dock == Dock.TOP) { bar(); HorizontalDivider() }
             Row(Modifier.weight(1f).fillMaxWidth()) {
-            if (dock == Dock.LEFT) { bar(); VerticalDivider() }
             BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
             val outerW = maxWidth
             val wide = outerW >= 720.dp
@@ -335,6 +335,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                         if (nb != null && page != null) {
                             val pageChanged = v.tag != page.id
                             v.notebookId = nb.id
+                            v.themeDeskColor = deskColor
                             v.paperStyle = nb.paper
                             v.paperColor = nb.paperColor
                             v.page = page
@@ -368,6 +369,22 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                         onClose = { canvas?.clearSelection() },
                     )
                 }
+                // floating pen toolbar
+                val align = when (dock) {
+                    Dock.TOP -> Alignment.TopCenter; Dock.BOTTOM -> Alignment.BottomCenter
+                    Dock.LEFT -> Alignment.CenterStart; Dock.RIGHT -> Alignment.CenterEnd
+                }
+                val dens = LocalDensity.current
+                Box(
+                    Modifier.align(align).padding(10.dp).onGloballyPositioned { c ->
+                        val w = c.size.width + with(dens) { 20.dp.toPx() }
+                        val h = c.size.height + with(dens) { 20.dp.toPx() }
+                        canvas?.setInsets(
+                            if (dock == Dock.LEFT) w.toFloat() else 0f, if (dock == Dock.TOP) h.toFloat() else 0f,
+                            if (dock == Dock.RIGHT) w.toFloat() else 0f, if (dock == Dock.BOTTOM) h.toFloat() else 0f,
+                        )
+                    },
+                ) { bar() }
             }
             if (panel.visible && wide && !panelLeft) {
                 ResizeHandle(outerW, panelLeft) { panelFraction = it(panelFraction) }
@@ -393,9 +410,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                 }
             }
             }
-            if (dock == Dock.RIGHT) { VerticalDivider(); bar() }
             }
-            if (dock == Dock.BOTTOM) { HorizontalDivider(); bar() }
         }
         // Drop targets while dragging the toolbar / panel
         dragAt?.let { p -> DropHint(nearestDock(p), area) }
@@ -544,18 +559,17 @@ private fun ToolBar(
             IconButton(onClick = onOptions) { Icon(Icons.Default.Tune, "Tool options") }
         }
     }
-    if (vertical) {
-        Box(Modifier.fillMaxHeight().width(60.dp).background(MaterialTheme.colorScheme.surface), contentAlignment = Alignment.Center) {
+    val pill = RoundedCornerShape(28.dp)
+    Surface(shape = pill, color = MaterialTheme.colorScheme.surfaceContainerHigh, shadowElevation = 6.dp, tonalElevation = 2.dp) {
+        if (vertical) {
             Column(
-                Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp),
+                Modifier.width(60.dp).heightIn(max = 720.dp).verticalScroll(rememberScrollState()).padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) { items() }
-        }
-    } else {
-        Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface), contentAlignment = Alignment.Center) {
+        } else {
             Row(
-                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) { items() }
@@ -565,7 +579,13 @@ private fun ToolBar(
 
 @Composable
 private fun ToolButton(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
-    FilledTonalIconToggleButton(checked = selected, onCheckedChange = { onClick() }) { Icon(icon, label) }
+    androidx.compose.material3.IconToggleButton(
+        checked = selected, onCheckedChange = { onClick() },
+        colors = androidx.compose.material3.IconButtonDefaults.iconToggleButtonColors(
+            checkedContainerColor = MaterialTheme.colorScheme.primary,
+            checkedContentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
+    ) { Icon(icon, label) }
 }
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)

@@ -121,7 +121,21 @@ class InkCanvasView(context: Context) : View(context) {
     private var directDraw = false
 
     // ---- paints ----
-    private val deskColor get() = if (paperColor.dark) 0xFF0E0F12.toInt() else 0xFFE4E6EB.toInt()
+    /** Background around the page; set from the app theme. */
+    var themeDeskColor: Int? = null
+        set(value) { if (field != value) { field = value; layerDirty = true; invalidate() } }
+    private val deskColor get() = themeDeskColor ?: if (paperColor.dark) 0xFF0E0F12.toInt() else 0xFFE4E6EB.toInt()
+
+    /** Space taken by floating UI (the toolbar pill) on each side, in px; the page starts clear of it. */
+    var insetLeft = 0f
+    var insetTop = 0f
+    var insetRight = 0f
+    var insetBottom = 0f
+    fun setInsets(l: Float, t: Float, r: Float, b: Float) {
+        if (l == insetLeft && t == insetTop && r == insetRight && b == insetBottom) return
+        insetLeft = l; insetTop = t; insetRight = r; insetBottom = b
+        if (width > 0) fitPage()
+    }
     private val shadowPaint = Paint().apply { color = 0x22000000 }
     private val lassoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; strokeWidth = 2.5f; color = 0xFF3B6CFF.toInt()
@@ -194,25 +208,29 @@ class InkCanvasView(context: Context) : View(context) {
     fun fitPage() {
         if (width == 0) return
         val margin = 16f * density
-        scale = (width - 2 * margin) / PAGE_WIDTH
+        val w = width - insetLeft - insetRight
+        val h = height - insetTop - insetBottom
+        scale = (w - 2 * margin) / PAGE_WIDTH
         // On wide screens don't let the page get absurdly large: fit height if width-fit is >1.6x
-        val hScale = (height - 2 * margin) / page.height
+        val hScale = (h - 2 * margin) / page.height
         if (scale > hScale * 1.6f) scale = hScale * 1.6f
-        tx = (width - PAGE_WIDTH * scale) / 2f
-        ty = margin
+        tx = insetLeft + (w - PAGE_WIDTH * scale) / 2f
+        ty = insetTop + margin
         afterViewportChange()
     }
 
     fun scrollToTop() {
-        ty = 16f * density
+        ty = insetTop + 16f * density
         clampViewport(); afterViewportChange()
     }
 
     private fun clampViewport() {
         val pw = PAGE_WIDTH * scale; val ph = page.height * scale
         val m = 48f * density
-        tx = if (pw + 2 * m <= width) (width - pw) / 2f else tx.coerceIn(width - pw - m, m)
-        ty = if (ph + 2 * m <= height) ty.coerceIn(m, max(m, height - ph - m)) else ty.coerceIn(height - ph - m, m)
+        val l = insetLeft; val t = insetTop
+        val w = width - insetLeft - insetRight; val h = height - insetTop - insetBottom
+        tx = if (pw + 2 * m <= w) l + (w - pw) / 2f else tx.coerceIn(l + w - pw - m, l + m)
+        ty = if (ph + 2 * m <= h) ty.coerceIn(t + m, t + max(m, h - ph - m)) else ty.coerceIn(t + h - ph - m, t + m)
     }
 
     private fun afterViewportChange() {
@@ -231,7 +249,14 @@ class InkCanvasView(context: Context) : View(context) {
         layer?.recycle(); layer = null
         if (w > 0 && h > 0) {
             layer = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-            if (!viewportInit) { viewportInit = true; fitPage() } else { clampViewport(); afterViewportChange() }
+            if (!viewportInit) { viewportInit = true; fitPage() }
+            else if (w != oldw) {
+                // width changed (panel opened/closed, rotation): refit, keeping the same spot of the document on screen
+                val docY = (insetTop - ty) / scale
+                fitPage()
+                ty = insetTop - docY * scale
+                clampViewport(); afterViewportChange()
+            } else { clampViewport(); afterViewportChange() }
         }
     }
 
