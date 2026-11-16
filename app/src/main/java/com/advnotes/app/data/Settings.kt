@@ -54,6 +54,10 @@ data class AppSettings(
     /** Handwriting → text: language name (see Handwriting.LANGUAGES) and engine. */
     val hwLanguage: String = "English",
     val hwEngine: String = "ON_DEVICE",
+    /** Where the pen toolbar is docked: TOP, BOTTOM, LEFT or RIGHT. */
+    val toolbarDock: String = "TOP",
+    /** Side of the page the tools panel sits on (tablets): LEFT or RIGHT. */
+    val panelSide: String = "RIGHT",
 )
 
 /**
@@ -104,6 +108,8 @@ class SettingsStore(context: Context) {
         localThreads = prefs.getInt("localThreads", 4),
         hwLanguage = prefs.getString("hwLanguage", null) ?: "English",
         hwEngine = prefs.getString("hwEngine", null) ?: "ON_DEVICE",
+        toolbarDock = prefs.getString("toolbarDock", null) ?: "TOP",
+        panelSide = prefs.getString("panelSide", null) ?: "RIGHT",
     )
 
     fun update(block: (AppSettings) -> AppSettings) {
@@ -120,6 +126,8 @@ class SettingsStore(context: Context) {
             .putInt("localThreads", s.localThreads)
             .putString("hwLanguage", s.hwLanguage)
             .putString("hwEngine", s.hwEngine)
+            .putString("toolbarDock", s.toolbarDock)
+            .putString("panelSide", s.panelSide)
             .apply()
         _state.value = s
     }

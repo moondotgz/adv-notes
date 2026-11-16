@@ -48,11 +48,17 @@ fun ToolPanel(
     onPicker: () -> Unit,
     onHide: () -> Unit,
     modifier: Modifier = Modifier,
+    grip: (@Composable () -> Unit)? = null,
 ) {
     Surface(modifier, tonalElevation = 2.dp, shadowElevation = 4.dp) {
         Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+                if (grip != null) Box(Modifier.align(Alignment.CenterStart)) { grip() }
+                // tool tabs, centred
+                Row(
+                    Modifier.align(Alignment.Center).padding(horizontal = 48.dp).horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     for (id in state.open) {
                         val t = tools.firstOrNull { it.id == id } ?: continue
                         FilledTonalIconToggleButton(checked = state.active == id, onCheckedChange = { onOpen(id) }) {
@@ -60,13 +66,11 @@ fun ToolPanel(
                         }
                     }
                     IconButton(onClick = onPicker) { Icon(Icons.Default.Add, "Open a tool") }
+                    state.active?.let { id -> tools.firstOrNull { it.id == id } }?.let { t ->
+                        IconButton(onClick = { onCloseTool(t.id) }) { Icon(Icons.Default.Close, "Close ${t.name}") }
+                    }
                 }
-                state.active?.let { id -> tools.firstOrNull { it.id == id } }?.let { t ->
-                    Text(t.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 4.dp))
-                    IconButton(onClick = { onCloseTool(t.id) }) { Icon(Icons.Default.Close, "Close ${t.name}") }
-                }
-                IconButton(onClick = onHide) { Icon(Icons.Default.KeyboardArrowDown, "Hide panel") }
+                IconButton(onClick = onHide, Modifier.align(Alignment.CenterEnd)) { Icon(Icons.Default.KeyboardArrowDown, "Hide panel") }
             }
             HorizontalDivider()
             Box(Modifier.weight(1f).fillMaxWidth()) {

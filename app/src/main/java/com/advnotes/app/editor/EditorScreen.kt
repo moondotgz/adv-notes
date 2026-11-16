@@ -123,6 +123,14 @@ import com.advnotes.app.tools.ToolStorage
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -256,14 +264,51 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
             )
         },
     ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize()) {
-            ToolBar(tool, onChange = vm::setTool, onOptions = { showOptions = true })
-            HorizontalDivider()
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+        val dock = runCatching { Dock.valueOf(settings.toolbarDock) }.getOrDefault(Dock.TOP)
+        val panelLeft = settings.panelSide == "LEFT"
+        var area by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+        var dragAt by remember { mutableStateOf<Offset?>(null) }      // toolbar being dragged
+        var panelDragAt by remember { mutableStateOf<Offset?>(null) } // panel being dragged
+        fun nearestDock(p: Offset): Dock {
+            val d = mapOf(Dock.LEFT to p.x - area.left, Dock.RIGHT to area.right - p.x, Dock.TOP to p.y - area.top, Dock.BOTTOM to area.bottom - p.y)
+            return d.minByOrNull { it.value }!!.key
+        }
+        val grip: @Composable () -> Unit = {
+            DragGrip(
+                "Move toolbar (drag to an edge)",
+                onTap = {},
+                onDragStart = { dragAt = it }, onDrag = { dragAt = it },
+                onDragEnd = { dragAt?.let { p -> app.settings.update { s -> s.copy(toolbarDock = nearestDock(p).name) } }; dragAt = null },
+                rotate = dock == Dock.TOP || dock == Dock.BOTTOM,
+            )
+        }
+        val bar: @Composable () -> Unit = { ToolBar(tool, onChange = vm::setTool, onOptions = { showOptions = true }, dock = dock, grip = grip) }
+        val panelGrip: @Composable () -> Unit = {
+            DragGrip(
+                "Move panel (drag left or right, or tap to swap sides)",
+                onTap = { app.settings.update { it.copy(panelSide = if (panelLeft) "RIGHT" else "LEFT") } },
+                onDragStart = { panelDragAt = it }, onDrag = { panelDragAt = it },
+                onDragEnd = {
+                    panelDragAt?.let { p -> app.settings.update { it.copy(panelSide = if (p.x < area.center.x) "LEFT" else "RIGHT") } }
+                    panelDragAt = null
+                },
+            )
+        }
+        Box(Modifier.padding(pad).fillMaxSize().onGloballyPositioned { area = it.boundsInRoot() }) {
+        Column(Modifier.fillMaxSize()) {
+            if (dock == Dock.TOP) { bar(); HorizontalDivider() }
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+            if (dock == Dock.LEFT) { bar(); VerticalDivider() }
+            BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
             val outerW = maxWidth
             val wide = outerW >= 720.dp
             val panelW = (outerW * panelFraction).coerceIn(300.dp, outerW - 240.dp)
             Row(Modifier.fillMaxSize()) {
+            if (panel.visible && wide && panelLeft) {
+                ToolPanel(panel, tools, hostFor, vm::openTool, vm::closeTool, vm::showPicker, vm::closePanel,
+                    Modifier.width(panelW).fillMaxHeight(), grip = panelGrip)
+                ResizeHandle(outerW, panelLeft) { panelFraction = it(panelFraction) }
+            }
             BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
                 val boxW = constraints.maxWidth
                 AndroidView(
@@ -321,18 +366,10 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                     )
                 }
             }
-            if (panel.visible && wide) {
-                // drag the divider to resize the panel
-                val totalPx = with(LocalDensity.current) { outerW.toPx() }
-                Box(
-                    Modifier.fillMaxHeight().width(10.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .pointerInput(totalPx) {
-                            detectHorizontalDragGestures { _, dx -> panelFraction = (panelFraction - dx / totalPx).coerceIn(0.25f, 0.7f) }
-                        },
-                    contentAlignment = Alignment.Center,
-                ) { Box(Modifier.size(3.dp, 36.dp).background(MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp))) }
-                ToolPanel(panel, tools, hostFor, vm::openTool, vm::closeTool, vm::showPicker, vm::closePanel, Modifier.width(panelW).fillMaxHeight())
+            if (panel.visible && wide && !panelLeft) {
+                ResizeHandle(outerW, panelLeft) { panelFraction = it(panelFraction) }
+                ToolPanel(panel, tools, hostFor, vm::openTool, vm::closeTool, vm::showPicker, vm::closePanel,
+                    Modifier.width(panelW).fillMaxHeight(), grip = panelGrip)
             }
             }
             if (panel.visible && !wide) {
@@ -342,6 +379,13 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                 )
             }
             }
+            if (dock == Dock.RIGHT) { VerticalDivider(); bar() }
+            }
+            if (dock == Dock.BOTTOM) { HorizontalDivider(); bar() }
+        }
+        // Drop targets while dragging the toolbar / panel
+        dragAt?.let { p -> DropHint(nearestDock(p), area) }
+        panelDragAt?.let { p -> DropHint(if (p.x < area.center.x) Dock.LEFT else Dock.RIGHT, area, thickness = 0.35f) }
         }
     }
 
@@ -410,17 +454,52 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
 // Toolbar
 // ----------------------------------------------------------------------------------------
 
+enum class Dock { TOP, BOTTOM, LEFT, RIGHT }
+
+/** Drag handle: drag to move the bar/panel, tap for [onTap]. Reports pointer positions in root coordinates. */
 @Composable
-private fun ToolBar(tool: ToolState, onChange: (ToolState) -> Unit, onOptions: () -> Unit) {
-    Row(
+fun DragGrip(
+    description: String,
+    onTap: () -> Unit,
+    onDragStart: (Offset) -> Unit,
+    onDrag: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    rotate: Boolean = false,
+) {
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    var pos by remember { mutableStateOf(Offset.Zero) }
+    Box(
         Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            .size(40.dp)
+            .onGloballyPositioned { origin = it.positionInRoot() }
+            .pointerInput(Unit) { detectTapGestures { onTap() } }
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { o -> pos = origin + o; onDragStart(pos) },
+                    onDrag = { change, d -> change.consume(); pos += d; onDrag(pos) },
+                    onDragEnd = onDragEnd,
+                    onDragCancel = onDragEnd,
+                )
+            },
+        contentAlignment = Alignment.Center,
     ) {
+        Icon(Icons.Default.DragIndicator, description, Modifier.rotate(if (rotate) 90f else 0f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** The pen toolbar. Horizontal when docked top/bottom, vertical on the sides; icons are centred. */
+@Composable
+private fun ToolBar(
+    tool: ToolState,
+    onChange: (ToolState) -> Unit,
+    onOptions: () -> Unit,
+    dock: Dock,
+    grip: @Composable () -> Unit,
+) {
+    val vertical = dock == Dock.LEFT || dock == Dock.RIGHT
+    val items: @Composable () -> Unit = {
+        grip()
         fun pick(t: Tool) { if (tool.tool == t) onOptions() else onChange(tool.copy(tool = t)) }
         ToolButton(Icons.Default.Draw, "Pen", tool.tool == Tool.PEN) { pick(Tool.PEN) }
         ToolButton(Icons.Default.BorderColor, "Highlighter", tool.tool == Tool.HIGHLIGHTER) { pick(Tool.HIGHLIGHTER) }
@@ -428,7 +507,8 @@ private fun ToolBar(tool: ToolState, onChange: (ToolState) -> Unit, onOptions: (
         ToolButton(Icons.Default.Gesture, "Lasso", tool.tool == Tool.LASSO) { pick(Tool.LASSO) }
         ToolButton(Icons.Default.Category, "Shapes", tool.tool == Tool.SHAPE) { pick(Tool.SHAPE) }
         ToolButton(Icons.Default.TextFields, "Text", tool.tool == Tool.TEXT) { pick(Tool.TEXT) }
-        VerticalDivider(Modifier.height(32.dp).padding(horizontal = 6.dp))
+        if (vertical) HorizontalDivider(Modifier.width(32.dp).padding(vertical = 6.dp))
+        else VerticalDivider(Modifier.height(32.dp).padding(horizontal = 6.dp))
         when (tool.tool) {
             Tool.PEN, Tool.SHAPE, Tool.TEXT -> PEN_COLORS.forEach { c ->
                 ColorDot(c, c == tool.penColor) { onChange(tool.copy(penColor = c)) }
@@ -436,11 +516,11 @@ private fun ToolBar(tool: ToolState, onChange: (ToolState) -> Unit, onOptions: (
             Tool.HIGHLIGHTER -> HIGHLIGHTER_COLORS.forEach { c ->
                 ColorDot(c, c == tool.hlColor) { onChange(tool.copy(hlColor = c)) }
             }
-            Tool.ERASER -> EraserMode.entries.forEach { m ->
+            Tool.ERASER -> if (!vertical) EraserMode.entries.forEach { m ->
                 FilterChip(m == tool.eraserMode, { onChange(tool.copy(eraserMode = m)) },
                     label = { Text(if (m == EraserMode.STROKE) "Whole stroke" else "Partial") })
             }
-            Tool.LASSO -> Text(
+            Tool.LASSO -> if (!vertical) Text(
                 "Circle ink to select · then move, resize, recolour or solve with AI",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -448,6 +528,23 @@ private fun ToolBar(tool: ToolState, onChange: (ToolState) -> Unit, onOptions: (
         }
         if (tool.tool != Tool.LASSO) {
             IconButton(onClick = onOptions) { Icon(Icons.Default.Tune, "Tool options") }
+        }
+    }
+    if (vertical) {
+        Box(Modifier.fillMaxHeight().width(60.dp).background(MaterialTheme.colorScheme.surface), contentAlignment = Alignment.Center) {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) { items() }
+        }
+    } else {
+        Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface), contentAlignment = Alignment.Center) {
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) { items() }
         }
     }
 }
@@ -783,5 +880,40 @@ private fun HandwritingSheet(
             }
             Spacer(Modifier.height(16.dp))
         }
+    }
+}
+
+/** Divider between page and panel; drag to resize. [update] receives a function old fraction -> new. */
+@Composable
+private fun ResizeHandle(total: androidx.compose.ui.unit.Dp, panelLeft: Boolean, update: ((Float) -> Float) -> Unit) {
+    val totalPx = with(LocalDensity.current) { total.toPx() }
+    Box(
+        Modifier.fillMaxHeight().width(10.dp)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .pointerInput(totalPx, panelLeft) {
+                detectHorizontalDragGestures { _, dx ->
+                    val d = (if (panelLeft) dx else -dx) / totalPx
+                    update { (it + d).coerceIn(0.25f, 0.7f) }
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) { Box(Modifier.size(3.dp, 36.dp).background(MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp))) }
+}
+
+/** Highlights the edge something will dock to when released. */
+@Composable
+private fun DropHint(edge: Dock, area: androidx.compose.ui.geometry.Rect, thickness: Float = 0f) {
+    val density = LocalDensity.current
+    val w = with(density) { area.width.toDp() }
+    val h = with(density) { area.height.toDp() }
+    val strip = 64.dp
+    val (mod, align) = when (edge) {
+        Dock.TOP -> Modifier.fillMaxWidth().height(strip) to Alignment.TopCenter
+        Dock.BOTTOM -> Modifier.fillMaxWidth().height(strip) to Alignment.BottomCenter
+        Dock.LEFT -> Modifier.fillMaxHeight().width(if (thickness > 0) w * thickness else strip) to Alignment.CenterStart
+        Dock.RIGHT -> Modifier.fillMaxHeight().width(if (thickness > 0) w * thickness else strip) to Alignment.CenterEnd
+    }
+    Box(Modifier.size(w, h)) {
+        Box(mod.align(align).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), RoundedCornerShape(12.dp)))
     }
 }

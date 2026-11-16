@@ -19,6 +19,7 @@ A notebook-style handwriting app for Android, built for the S Pen. It has an AI 
 - Lasso: select ink and text, then move, resize (corner handle), duplicate, recolour, delete or **Solve**.
 - Text boxes; undo/redo; pinch to zoom, two fingers to pan, double-tap to fit.
 - Palm rejection: in *Auto* mode fingers draw until a pen is seen, after which fingers only scroll and zoom.
+- Movable toolbar: drag its ⠿ handle to the top, bottom, left or right edge (icons stay centred). The tools panel can sit left or right of the page: drag or tap its handle.
 
 **Notebooks**
 - Paper styles: Plain, Narrow grid (5 mm), Grid (7 mm), Dotted, **Oxford** (7 mm ruling, header band, red margin), College ruled, Wide ruled, Cornell, Isometric. Paper colours: white, cream, mint and dark. You can set the style per notebook or per page.

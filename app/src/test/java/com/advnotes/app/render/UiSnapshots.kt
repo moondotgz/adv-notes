@@ -17,7 +17,9 @@ import com.advnotes.app.model.Notebook
 import com.advnotes.app.model.PaperColor
 import com.advnotes.app.model.PaperStyle
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import androidx.compose.ui.test.performTouchInput
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -212,6 +214,36 @@ class UiSnapshots {
         snap("16_selection_bar")
         rule.onNodeWithText("Solve", useUnmergedTree = true).performClick()
         snap("17_solver_subjects")
+    }
+
+    @Test fun movableBars() {
+        val app = AdvNotesApp.instance
+        runBlocking { app.repo.save(Notebook(title = "Lab", paper = PaperStyle.GRID)) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Lab").performClick()
+        rule.waitForIdle()
+        // drag the toolbar handle to the left edge
+        rule.onNode(androidx.compose.ui.test.hasContentDescription("Move toolbar (drag to an edge)")).performTouchInput {
+            down(center); moveBy(androidx.compose.ui.geometry.Offset(-40f, 300f)); moveBy(androidx.compose.ui.geometry.Offset(-200f, 300f)); up()
+        }
+        rule.waitForIdle()
+        assertEquals("LEFT", app.settings.state.value.toolbarDock)
+        // open the calculator and drag the panel to the left side
+        rule.onNodeWithContentDescriptionCompat("Tools")
+        click("Scientific calculator")
+        rule.onNode(androidx.compose.ui.test.hasContentDescription("Move panel (drag left or right, or tap to swap sides)")).performTouchInput {
+            down(center); moveBy(androidx.compose.ui.geometry.Offset(-200f, 0f)); moveBy(androidx.compose.ui.geometry.Offset(-1000f, 0f)); up()
+        }
+        rule.waitForIdle()
+        assertEquals("LEFT", app.settings.state.value.panelSide)
+        snap("18_moved_bars")
+        // and the toolbar to the bottom
+        rule.onNode(androidx.compose.ui.test.hasContentDescription("Move toolbar (drag to an edge)")).performTouchInput {
+            down(center); moveBy(androidx.compose.ui.geometry.Offset(300f, 1000f)); moveBy(androidx.compose.ui.geometry.Offset(100f, 1500f)); up()
+        }
+        rule.waitForIdle()
+        assertEquals("BOTTOM", app.settings.state.value.toolbarDock)
+        snap("19_toolbar_bottom")
     }
 
     private fun androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>.onNodeWithContentDescriptionCompat(desc: String) {

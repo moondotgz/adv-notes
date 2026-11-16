@@ -131,6 +131,19 @@ fun SettingsScreen(onBack: () -> Unit) {
                     "Light: thick lines with little pressure. Firm: you need to press harder for thick lines.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(8.dp))
+                Text("Toolbar position (or drag the ⠿ handle on the toolbar)", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("TOP" to "Top", "BOTTOM" to "Bottom", "LEFT" to "Left", "RIGHT" to "Right").forEach { (k, l) ->
+                        FilterChip(s.toolbarDock == k, { app.settings.update { it.copy(toolbarDock = k) } }, label = { Text(l) })
+                    }
+                }
+                Text("Tools panel side on tablets", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("LEFT" to "Left", "RIGHT" to "Right").forEach { (k, l) ->
+                        FilterChip(s.panelSide == k, { app.settings.update { it.copy(panelSide = k) } }, label = { Text(l) })
+                    }
+                }
                 SwitchRow("Hold to snap shapes", "Keep the pen still at the end of a stroke to turn it into a straight line or clean shape.", s.holdToShape) { v ->
                     app.settings.update { it.copy(holdToShape = v) }
                 }
