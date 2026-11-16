@@ -22,7 +22,11 @@ import kotlin.math.pow
  * Turns strokes into filled outlines whose width follows pen pressure. Paths are cached per stroke.
  */
 class StrokeRenderer(var pressureCurve: Float = 1f) {
+    /** Pen strokes: [body] is the variable-width outline, [caps] the round ends/joins. */
+    private class Outline(val body: Path, val caps: Path)
+
     private val cache = object : LruCache<Stroke, Path>(4000) {}
+    private val penCache = object : LruCache<Stroke, Outline>(4000) {}
     private val textCache = object : LruCache<TextBox, StaticLayout>(300) {}
 
     private val penPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
@@ -33,7 +37,7 @@ class StrokeRenderer(var pressureCurve: Float = 1f) {
     }
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
 
-    fun clearCache() { cache.evictAll() }
+    fun clearCache() { cache.evictAll(); penCache.evictAll() }
 
     fun widthAt(s: Stroke, p: Float): Float =
         if (!s.pressure) s.width * 0.7f
@@ -51,8 +55,11 @@ class StrokeRenderer(var pressureCurve: Float = 1f) {
             } else canvas.drawPath(path, hlPaint)
         } else {
             penPaint.color = s.color
-            val path = if (live) outline(s) else cache.get(s) ?: outline(s).also { cache.put(s, it) }
-            canvas.drawPath(path, penPaint)
+            val o = if (live) outline(s) else penCache.get(s) ?: outline(s).also { penCache.put(s, it) }
+            // Drawn separately: in one path, caps wound opposite to the outline would cancel
+            // out under the non-zero fill rule and leave white holes.
+            canvas.drawPath(o.body, penPaint)
+            canvas.drawPath(o.caps, penPaint)
         }
     }
 
@@ -104,9 +111,10 @@ class StrokeRenderer(var pressureCurve: Float = 1f) {
     }
 
     /** Variable-width outline built from left/right offset curves plus round caps. */
-    private fun outline(s: Stroke): Path {
+    private fun outline(s: Stroke): Outline {
         val n = s.count
         val path = Path().apply { fillType = Path.FillType.WINDING }
+        val caps = Path().apply { fillType = Path.FillType.WINDING }
         val hw = FloatArray(n) { widthAt(s, s.p(it)) / 2f }
         // smooth widths a little to avoid ripples from noisy pressure
         if (n > 2 && s.pressure) {
@@ -114,39 +122,48 @@ class StrokeRenderer(var pressureCurve: Float = 1f) {
             for (i in 1 until n - 1) hw[i] = (tmp[i - 1] + 2 * tmp[i] + tmp[i + 1]) / 4f
         }
         if (n == 1) {
-            path.addCircle(s.x(0), s.y(0), hw[0], Path.Direction.CW)
-            return path
+            caps.addCircle(s.x(0), s.y(0), hw[0], Path.Direction.CW)
+            return Outline(path, caps)
         }
-        val lx = FloatArray(n); val ly = FloatArray(n); val rx = FloatArray(n); val ry = FloatArray(n)
-        for (i in 0 until n) {
-            val a = if (i == 0) 0 else i - 1
-            val b = if (i == n - 1) n - 1 else i + 1
-            var tx = s.x(b) - s.x(a); var ty = s.y(b) - s.y(a)
-            val len = hypot(tx, ty)
-            if (len < 1e-4f) { tx = 1f; ty = 0f } else { tx /= len; ty /= len }
-            val nx = -ty; val ny = tx
-            lx[i] = s.x(i) + nx * hw[i]; ly[i] = s.y(i) + ny * hw[i]
-            rx[i] = s.x(i) - nx * hw[i]; ry[i] = s.y(i) - ny * hw[i]
-        }
-        path.moveTo(lx[0], ly[0])
-        for (i in 1 until n - 1) path.quadTo(lx[i], ly[i], (lx[i] + lx[i + 1]) / 2f, (ly[i] + ly[i + 1]) / 2f)
-        path.lineTo(lx[n - 1], ly[n - 1])
-        path.lineTo(rx[n - 1], ry[n - 1])
-        for (i in n - 2 downTo 1) path.quadTo(rx[i], ry[i], (rx[i] + rx[i - 1]) / 2f, (ry[i] + ry[i - 1]) / 2f)
-        path.lineTo(rx[0], ry[0])
-        path.close()
-        // round caps
-        path.addCircle(s.x(0), s.y(0), hw[0], Path.Direction.CW)
-        path.addCircle(s.x(n - 1), s.y(n - 1), hw[n - 1], Path.Direction.CW)
-        // round joins at sharp corners, where the offset curves would fold over
+        // Split at sharp corners: each piece gets its own outline (all traced with the same
+        // orientation, so they merge under the non-zero rule) and the corner gets a round join.
+        val cuts = ArrayList<Int>().apply { add(0) }
         for (i in 1 until n - 1) {
             val ax = s.x(i) - s.x(i - 1); val ay = s.y(i) - s.y(i - 1)
             val bx = s.x(i + 1) - s.x(i); val by = s.y(i + 1) - s.y(i)
             val la = hypot(ax, ay); val lb = hypot(bx, by)
             if (la < 1e-3f || lb < 1e-3f) continue
             val cos = ((ax * bx + ay * by) / (la * lb)).coerceIn(-1f, 1f)
-            if (abs(acos(cos)) > 0.9f) path.addCircle(s.x(i), s.y(i), hw[i], Path.Direction.CW)
+            if (abs(acos(cos)) > 0.9f) cuts += i
         }
-        return path
+        cuts += n - 1
+        for (k in 0 until cuts.size - 1) addPiece(path, s, hw, cuts[k], cuts[k + 1])
+        for (i in cuts) caps.addCircle(s.x(i), s.y(i), hw[i], Path.Direction.CW)
+        return Outline(path, caps)
+    }
+
+    /** Adds the closed outline of points [from]..[to] (inclusive) to [path]. */
+    private fun addPiece(path: Path, s: Stroke, hw: FloatArray, from: Int, to: Int) {
+        val m = to - from + 1
+        if (m < 2) return
+        val lx = FloatArray(m); val ly = FloatArray(m); val rx = FloatArray(m); val ry = FloatArray(m)
+        for (j in 0 until m) {
+            val i = from + j
+            val a = if (j == 0) i else i - 1
+            val b = if (j == m - 1) i else i + 1
+            var tx = s.x(b) - s.x(a); var ty = s.y(b) - s.y(a)
+            val len = hypot(tx, ty)
+            if (len < 1e-4f) { tx = 1f; ty = 0f } else { tx /= len; ty /= len }
+            val nx = -ty; val ny = tx
+            lx[j] = s.x(i) + nx * hw[i]; ly[j] = s.y(i) + ny * hw[i]
+            rx[j] = s.x(i) - nx * hw[i]; ry[j] = s.y(i) - ny * hw[i]
+        }
+        path.moveTo(lx[0], ly[0])
+        for (j in 1 until m - 1) path.quadTo(lx[j], ly[j], (lx[j] + lx[j + 1]) / 2f, (ly[j] + ly[j + 1]) / 2f)
+        path.lineTo(lx[m - 1], ly[m - 1])
+        path.lineTo(rx[m - 1], ry[m - 1])
+        for (j in m - 2 downTo 1) path.quadTo(rx[j], ry[j], (rx[j] + rx[j - 1]) / 2f, (ry[j] + ry[j - 1]) / 2f)
+        path.lineTo(rx[0], ry[0])
+        path.close()
     }
 }

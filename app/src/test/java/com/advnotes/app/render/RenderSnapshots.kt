@@ -87,4 +87,35 @@ class RenderSnapshots {
         StrokeRenderer().drawPage(c, page, PaperStyle.OXFORD, PaperColor.WHITE)
         save(bmp, "sample_page")
     }
+
+    /** Regression: round caps/joins used to cancel against the outline and leave white holes. */
+    @Test fun noHolesInPenStrokes() {
+        fun st(vararg xyp: Float) = Stroke(color = 0xFF000000.toInt(), width = 14f, pts = xyp)
+        val strokes = listOf(
+            st(100f, 100f, 1f, 300f, 100f, 0.8f),                    // left -> right
+            st(300f, 200f, 1f, 100f, 200f, 0.8f),                    // right -> left
+            st(100f, 300f, 0.3f, 300f, 360f, 1f, 100f, 420f, 0.5f), // sharp V turn
+            st(300f, 460f, 0.9f, 100f, 520f, 1f, 300f, 580f, 0.4f), // V the other way
+            st(200f, 650f, 1f, 200f, 640f, 1f, 205f, 650f, 1f),      // tiny hook
+        ) + (0 until 2).map { dir ->                                 // closed loops both ways
+            val pts = ArrayList<Float>()
+            for (k in 0..40) {
+                val a = (if (dir == 0) k else 40 - k) / 40f * 6.6f
+                pts += 200f + kotlin.math.cos(a) * 60f; pts += 800f + dir * 180f + kotlin.math.sin(a) * 60f
+                pts += 0.4f + 0.6f * (k / 40f)
+            }
+            st(*pts.toFloatArray())
+        }
+        val bmp = Bitmap.createBitmap(400, 1100, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawColor(0xFFFFFFFF.toInt())
+        val r = StrokeRenderer()
+        strokes.forEach { r.draw(c, it) }
+        save(bmp, "stroke_holes")
+        for (s in strokes) for (i in 0 until s.count) {
+            val px = bmp.getPixel(s.x(i).toInt(), s.y(i).toInt())
+            val lum = (px shr 16 and 0xFF) + (px shr 8 and 0xFF) + (px and 0xFF)
+            org.junit.Assert.assertTrue("hole at point $i of stroke ${strokes.indexOf(s)}", lum < 200)
+        }
+    }
 }
