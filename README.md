@@ -26,7 +26,7 @@ A notebook-style handwriting app for Android, built for the S Pen. It has an AI 
 - Multiple pages, PDF export / share.
 
 **Import from other apps** (library ⇪ button, or *Insert pages from file…* inside a notebook)
-- **Samsung Notes** `.sdocx`: handwriting comes in as real, editable strokes (Share → *Samsung Notes file* in Samsung Notes). The format is undocumented; the decoder follows the reverse-engineered description in [bxff/samsung-notes-format](https://github.com/bxff/samsung-notes-format) (MIT). Only stroke shapes are known, so pen colours/widths come in as defaults, and typed text and images are skipped. Export to PDF from Samsung Notes if you need those.
+- **Samsung Notes** `.sdocx`: handwriting comes in as real, editable strokes with their colour, pen size and pressure, plus shapes and lines (Share → *Samsung Notes file* in Samsung Notes). The format is undocumented; the decoder follows the reverse-engineered descriptions in [bxff/samsung-notes-format](https://github.com/bxff/samsung-notes-format) (MIT) and the format facts documented by [twangodev/sdocx](https://github.com/twangodev/sdocx). Typed text, images and audio are skipped; export to PDF from Samsung Notes if you need those. Pen *types* (fountain pen, brush, pencil texture) become a normal pen.
 - **PDF** (also how GoodNotes, Notability, OneNote and Samsung Notes export): every page becomes a page you can write on. Circle printed text with the lasso and *Solve* or *To text* works on it.
 - **Images** (PNG/JPEG/WebP; pick several for several pages).
 - **Xournal++** `.xopp`: strokes with pressure, highlighter, text and paper style.

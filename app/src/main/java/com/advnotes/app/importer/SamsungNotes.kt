@@ -62,7 +62,7 @@ object SamsungNotes {
         val pages = raw.map { toPage(it) }
         val skipped = raw.sumOf { it.skipped }
         val warnings = buildList {
-            add("Samsung Notes import: handwriting comes in with a default pen colour and thickness; shapes keep theirs. Typed text and images are skipped.")
+            add("Samsung Notes import: typed text, images and special pen textures (brush, pencil, fountain pen) aren't imported; everything is drawn with the normal pen.")
             if (skipped > 0) add("$skipped object(s) couldn't be read and were skipped.")
         }
         return Notebook(id = id, title = title, paper = PaperStyle.PLAIN, pages = pages) to warnings
