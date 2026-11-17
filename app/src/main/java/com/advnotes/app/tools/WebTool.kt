@@ -194,9 +194,9 @@ class WebTool(
                             val imageArg = (args["image"] as? JsonPrimitive)?.content
                             val image: ByteArray? = when {
                                 imageArg == null -> null
-                                imageArg == "selection" -> onMain { host.selectionImage() }?.let { png(it) }
+                                imageArg == "selection" -> onMain { host.selectionImage() }?.let { withContext(Dispatchers.Default) { png(it) } }
                                     ?: throw IllegalStateException("Select something with the lasso first.")
-                                imageArg == "page" -> onMain { host.pageImage() }?.let { png(it) }
+                                imageArg == "page" -> onMain { host.pageImage() }?.let { withContext(Dispatchers.Default) { png(it) } }
                                     ?: throw IllegalStateException("Couldn't capture the visible page.")
                                 else -> decodeDataUrl(imageArg)
                             }
