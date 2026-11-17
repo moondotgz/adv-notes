@@ -97,6 +97,7 @@ class StrokeRenderer(var pressureCurve: Float = 1f) {
         exclude: Set<String> = emptySet(),
         drawPaper: Boolean = true,
         background: Bitmap? = null,
+        images: (com.advnotes.app.model.ImageBox) -> Bitmap? = { null },
     ) {
         if (drawPaper) PaperRenderer.draw(canvas, page.paper ?: paper, color, page.height)
         if (background != null) {
@@ -105,9 +106,18 @@ class StrokeRenderer(var pressureCurve: Float = 1f) {
                 android.graphics.RectF(0f, 0f, com.advnotes.app.model.PAGE_WIDTH, page.height), bmpPaint,
             )
         }
+        for (im in page.images) if (im.id !in exclude) drawImage(canvas, im, images(im))
         for (s in page.strokes) if (s.kind == InkKind.HIGHLIGHTER && s.id !in exclude) draw(canvas, s)
         for (s in page.strokes) if (s.kind == InkKind.PEN && s.id !in exclude) draw(canvas, s)
         for (t in page.texts) if (t.id !in exclude) drawText(canvas, t)
+    }
+
+    private val imgPlaceholder = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x22808080 }
+
+    /** Draws a placed picture, or a grey box while it is still loading. */
+    fun drawImage(canvas: Canvas, im: com.advnotes.app.model.ImageBox, bmp: Bitmap?) {
+        val r = android.graphics.RectF(im.x, im.y, im.x + im.w, im.y + im.h)
+        if (bmp != null) canvas.drawBitmap(bmp, null, r, bmpPaint) else canvas.drawRect(r, imgPlaceholder)
     }
 
     private fun centerline(s: Stroke): Path {

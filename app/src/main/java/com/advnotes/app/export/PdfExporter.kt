@@ -25,7 +25,8 @@ object PdfExporter {
             val c = p.canvas
             c.scale(PT_W / PAGE_WIDTH, PT_W / PAGE_WIDTH)
             val bg = page.background?.let { Backgrounds.renderNow(nb.id, it, 1600) }
-            renderer.drawPage(c, page, nb.paper, nb.paperColor, background = bg)
+            renderer.drawPage(c, page, nb.paper, nb.paperColor, background = bg,
+                images = { Backgrounds.renderNow(nb.id, com.advnotes.app.model.PageBackground(it.asset), 1600) })
             doc.finishPage(p)
         }
         val dir = File(context.cacheDir, "exports").apply { mkdirs() }

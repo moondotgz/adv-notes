@@ -265,7 +265,7 @@ class DriveSync(
     private suspend fun syncAssets(token: String, folder: String, remoteAssets: List<Remote>) {
         val have = remoteAssets.map { it.notebookId to it.asset }.toSet()
         for (nb in repo.loadAll()) {
-            val needed = nb.pages.mapNotNull { it.background?.asset }.distinct()
+            val needed = (nb.pages.mapNotNull { it.background?.asset } + nb.pages.flatMap { p -> p.images.map { it.asset } }).distinct()
             for (name in needed) {
                 val local = repo.assetFile(nb.id, name)
                 if (local.exists() && (nb.id to name) !in have) uploadAsset(token, folder, nb.id, local)

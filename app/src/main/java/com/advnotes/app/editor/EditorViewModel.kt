@@ -136,12 +136,19 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         refreshUndoFlags()
     }
 
-    fun addPage() {
+    /** A blank page that keeps the paper of [like] (pages inherit the style of the page next to them). */
+    private fun blankLike(like: Page?) = Page(paper = like?.paper)
+
+    fun addPage() = insertPage(before = false)
+
+    /** Inserts a blank page before or after the current one and shows it. */
+    fun insertPage(before: Boolean) {
         _ui.update { s ->
             val nb = s.notebook ?: return@update s
             if (nb.lockPages) return@update s
-            val pages = nb.pages.toMutableList().apply { add(s.pageIndex + 1, Page()) }
-            s.copy(notebook = nb.copy(pages = pages), pageIndex = s.pageIndex + 1)
+            val at = if (before) s.pageIndex else s.pageIndex + 1
+            val pages = nb.pages.toMutableList().apply { add(at, blankLike(nb.pages.getOrNull(s.pageIndex))) }
+            s.copy(notebook = nb.copy(pages = pages), pageIndex = at)
         }
         scheduleSave(); refreshUndoFlags()
     }
@@ -155,10 +162,17 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         val nb = s.notebook ?: return
         val base = s.pageIndex - s.pageIndex % step
         val target = base + dir * step
-        if (target < 0) return
+        if (target < 0) {
+            // Pulling back past the first page adds pages in front.
+            if (nb.lockPages) return
+            val extra = List(step) { blankLike(nb.pages.firstOrNull()) }
+            _ui.update { it.copy(notebook = nb.copy(pages = extra + nb.pages), pageIndex = 0) }
+            scheduleSave(); refreshUndoFlags()
+            return
+        }
         if (target >= nb.pages.size && nb.lockPages) return
         if (target >= nb.pages.size) {
-            val extra = List(target - nb.pages.size + 1) { Page() }
+            val extra = List(target - nb.pages.size + 1) { blankLike(nb.pages.lastOrNull()) }
             _ui.update { it.copy(notebook = nb.copy(pages = nb.pages + extra)) }
             scheduleSave()
         }
@@ -169,7 +183,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun appendPage() {
         _ui.update { s ->
             val nb = s.notebook ?: return@update s
-            if (nb.lockPages) s else s.copy(notebook = nb.copy(pages = nb.pages + Page()))
+            if (nb.lockPages) s else s.copy(notebook = nb.copy(pages = nb.pages + blankLike(nb.pages.lastOrNull())))
         }
         scheduleSave()
     }
@@ -225,11 +239,69 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         scheduleSave(); refreshUndoFlags()
     }
 
-    fun setPaper(style: PaperStyle, wholeNotebook: Boolean) {
+    /**
+     * Places a picture on the current page, centred in [view] (the visible part of the page, in page
+     * units) and at most 60% of its width. [onPlaced] gets the new element's id so the canvas can select it.
+     */
+    fun insertImage(uri: android.net.Uri, view: android.graphics.RectF, onPlaced: (String?) -> Unit) {
+        val nb = _ui.value.notebook ?: return
+        val pageId = currentPage?.id ?: return
+        viewModelScope.launch {
+            val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val bmp = decodeUpright(uri, 2000) ?: return@runCatching null
+                    val png = bmp.hasAlpha()
+                    val name = "img-" + com.advnotes.app.model.newId() + if (png) ".png" else ".jpg"
+                    val f = a.repo.assetFile(nb.id, name).apply { parentFile?.mkdirs() }
+                    f.outputStream().use { bmp.compress(if (png) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, 90, it) }
+                    Triple(name, bmp.width, bmp.height)
+                }.getOrNull()
+            }
+            if (saved == null) { onPlaced(null); return@launch }
+            val (name, bw, bh) = saved
+            val cur = _ui.value.notebook?.pages?.firstOrNull { it.id == pageId } ?: return@launch
+            val maxW = (view.width() * 0.6f).coerceAtLeast(120f)
+            val maxH = (view.height() * 0.6f).coerceAtLeast(120f)
+            val k = minOf(maxW / bw, maxH / bh)
+            val w = bw * k; val h = bh * k
+            val im = com.advnotes.app.model.ImageBox(asset = name, x = view.centerX() - w / 2, y = view.centerY() - h / 2, w = w, h = h)
+            if (currentPage?.id == pageId) commit(cur.copy(images = cur.images + im))
+            onPlaced(im.id)
+        }
+    }
+
+    /** Decodes an image the right way up, with its longer side at most [maxSide] pixels. */
+    private fun decodeUpright(uri: android.net.Uri, maxSide: Int): Bitmap? {
+        val cr = a.contentResolver
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            return android.graphics.ImageDecoder.decodeBitmap(android.graphics.ImageDecoder.createSource(cr, uri)) { dec, info, _ ->
+                val w = info.size.width; val h = info.size.height
+                val f = maxSide.toFloat() / maxOf(w, h)
+                if (f < 1f) dec.setTargetSize((w * f).toInt().coerceAtLeast(1), (h * f).toInt().coerceAtLeast(1))
+                dec.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        }
+        val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        cr.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, o) }
+        var sample = 1
+        while (maxOf(o.outWidth, o.outHeight) / (sample * 2) >= maxSide) sample *= 2
+        return cr.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }) }
+    }
+
+    enum class PaperScope { ALL, THIS_PAGE, FROM_HERE }
+
+    /**
+     * Applies a paper style. FROM_HERE restyles this page and every page after it; new pages take
+     * the style of the page they are added next to, so pages added later keep it too.
+     */
+    fun setPaper(style: PaperStyle, scope: PaperScope) {
         _ui.update { s ->
             val nb = s.notebook ?: return@update s
-            if (wholeNotebook) s.copy(notebook = nb.copy(paper = style, pages = nb.pages.map { it.copy(paper = null) }))
-            else s.copy(notebook = nb.copy(pages = nb.pages.mapIndexed { i, p -> if (i == s.pageIndex) p.copy(paper = style) else p }))
+            when (scope) {
+                PaperScope.ALL -> s.copy(notebook = nb.copy(paper = style, pages = nb.pages.map { it.copy(paper = null) }))
+                PaperScope.THIS_PAGE -> s.copy(notebook = nb.copy(pages = nb.pages.mapIndexed { i, p -> if (i == s.pageIndex) p.copy(paper = style) else p }))
+                PaperScope.FROM_HERE -> s.copy(notebook = nb.copy(pages = nb.pages.mapIndexed { i, p -> if (i >= s.pageIndex) p.copy(paper = style) else p }))
+            }
         }
         scheduleSave()
     }

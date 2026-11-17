@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,6 +43,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.key
 import androidx.compose.material.icons.filled.Draw
@@ -202,7 +207,6 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
             }
         }
     }
-    var showOptions by remember { mutableStateOf(false) }
     var showPaper by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
     var showNav by remember { mutableStateOf(false) }
@@ -211,10 +215,22 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
     var activeSlot by remember { mutableStateOf(0) }
     var lastSwipe by remember { mutableStateOf(0) }
     var menu by remember { mutableStateOf(false) }
+    var barHidden by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
     val insertLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()
     ) { uris -> if (uris.isNotEmpty()) vm.insertPagesFrom(uris) { msg -> msg?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show() } } }
+
+    val imageLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        val v = canvas ?: return@rememberLauncherForActivityResult
+        if (uri == null) return@rememberLauncherForActivityResult
+        vm.insertImage(uri, v.visiblePageRect()) { id ->
+            if (id == null) Toast.makeText(ctx, "Couldn't open that image", Toast.LENGTH_SHORT).show()
+            else { canvas?.pendingSelectImage = id; vm.setTool(tool.copy(tool = Tool.LASSO)) }
+        }
+    }
 
     val leave = { vm.onLeave(); onBack() }
     BackHandler { leave() }
@@ -238,23 +254,29 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            if (!barHidden) TopAppBar(
                 navigationIcon = { IconButton(onClick = leave) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 title = {
-                    Text(
-                        nb?.title ?: "",
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(end = 4.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                    Row(
+                        Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = nb != null) { showRename = true }.padding(vertical = 6.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            nb?.title ?: "",
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Icon(Icons.Default.Edit, "Rename notebook", Modifier.padding(start = 4.dp).size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 },
                 actions = {
+                    IconButton(onClick = { barHidden = true }) { Icon(Icons.Default.KeyboardArrowUp, "Hide top bar") }
                     IconButton(onClick = { showPages = !showPages }) { Icon(Icons.Default.ViewSidebar, "Page list") }
                     IconButton(onClick = { if (panel.open.isEmpty() && !panel.visible) vm.showPicker() else vm.togglePanel() }) {
                         Icon(Icons.Default.Widgets, "Tools")
                     }
-                    IconButton(onClick = vm::undo, enabled = ui.canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, "Undo") }
-                    IconButton(onClick = vm::redo, enabled = ui.canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, "Redo") }
                     if (nav == "ARROWS") IconButton(onClick = { vm.goTo(ui.pageIndex - 1) }, enabled = ui.pageIndex > 0) {
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous page")
                     }
@@ -274,6 +296,10 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                                 onClick = { menu = false; vm.setLockPages(nb?.lockPages != true) },
                             )
                             DropdownMenuItem(text = { Text("Rename…") }, onClick = { menu = false; showRename = true })
+                            if (nb?.lockPages != true) {
+                                DropdownMenuItem(text = { Text("New page before this one") }, onClick = { menu = false; vm.insertPage(before = true) })
+                                DropdownMenuItem(text = { Text("New page after this one") }, onClick = { menu = false; vm.insertPage(before = false) })
+                            }
                             DropdownMenuItem(text = { Text("Insert pages from file…") }, onClick = { menu = false; insertLauncher.launch(arrayOf("*/*")) })
                             DropdownMenuItem(text = { Text("Fit page to screen") }, onClick = { menu = false; canvas?.fitPage() })
                             DropdownMenuItem(text = { Text("Export PDF") }, onClick = {
@@ -310,7 +336,13 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                 rotate = dock == Dock.TOP || dock == Dock.BOTTOM,
             )
         }
-        val bar: @Composable () -> Unit = { ToolBar(tool, onChange = vm::setTool, onOptions = { showOptions = true }, dock = dock, grip = grip) }
+        val bar: @Composable () -> Unit = {
+            ToolBar(
+                tool, onChange = vm::setTool, dock = dock, grip = grip,
+                canUndo = ui.canUndo, canRedo = ui.canRedo, onUndo = vm::undo, onRedo = vm::redo,
+                onImage = { imageLauncher.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            )
+        }
         val panelGrip: @Composable () -> Unit = {
             DragGrip(
                 "Move panel (drag left or right, or tap to swap sides)",
@@ -409,7 +441,8 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                                 val step = if (app.settings.state.value.pageNav == "TWO_PAGE") 2 else 1
                                 val target = st.pageIndex - st.pageIndex % step + dir * step
                                 when {
-                                    book == null || target < 0 -> null
+                                    book == null -> null
+                                    target < 0 -> if (book.lockPages) null else "New page before"
                                     target < book.pages.size -> if (dir > 0) "Next page" else "Previous page"
                                     book.lockPages -> null
                                     else -> "New page"
@@ -500,15 +533,21 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
             }
         }
         // Drop targets while dragging the toolbar / panel
+        if (barHidden) {
+            androidx.compose.material3.SmallFloatingActionButton(
+                onClick = { barHidden = false },
+                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) { Icon(Icons.Default.KeyboardArrowDown, "Show top bar") }
+        }
         dragAt?.let { p -> DropHint(nearestDock(p), area) }
         panelDragAt?.let { p -> DropHint(if (p.x < area.center.x) Dock.LEFT else Dock.RIGHT, area, thickness = 0.35f) }
         }
     }
 
-    if (showOptions) ToolOptionsDialog(tool, vm::setTool) { showOptions = false }
 
     if (showPaper && nb != null) {
-        var whole by remember { mutableStateOf(true) }
+        var scopeSel by remember { mutableStateOf(EditorViewModel.PaperScope.ALL) }
         var style by remember { mutableStateOf(page?.paper ?: nb.paper) }
         AlertDialog(
             onDismissRequest = { showPaper = false },
@@ -516,14 +555,18 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     PaperPicker(style) { style = it }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(whole, { whole = true }); Text("All pages")
-                        Spacer(Modifier.width(12.dp))
-                        RadioButton(!whole, { whole = false }); Text("This page only")
+                    listOf(
+                        EditorViewModel.PaperScope.ALL to "All pages",
+                        EditorViewModel.PaperScope.THIS_PAGE to "This page only",
+                        EditorViewModel.PaperScope.FROM_HERE to "This page and all after it (new pages too)",
+                    ).forEach { (k, label) ->
+                        Row(Modifier.fillMaxWidth().clickable { scopeSel = k }, verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(scopeSel == k, { scopeSel = k }); Text(label)
+                        }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { vm.setPaper(style, whole); showPaper = false }) { Text("Apply") } },
+            confirmButton = { TextButton(onClick = { vm.setPaper(style, scopeSel); showPaper = false }) { Text("Apply") } },
             dismissButton = { TextButton(onClick = { showPaper = false }) { Text("Cancel") } },
         )
     }
@@ -640,21 +683,36 @@ fun DragGrip(
 private fun ToolBar(
     tool: ToolState,
     onChange: (ToolState) -> Unit,
-    onOptions: () -> Unit,
     dock: Dock,
     grip: @Composable () -> Unit,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onImage: () -> Unit,
 ) {
     val vertical = dock == Dock.LEFT || dock == Dock.RIGHT
+    // "tool" = options popped out from the selected tool's icon, "tune" = from the options button
+    var optionsAt by remember { mutableStateOf<String?>(null) }
     val items: @Composable () -> Unit = {
         grip()
-        fun pick(t: Tool) { if (tool.tool == t) onOptions() else onChange(tool.copy(tool = t)) }
-        ToolButton(Icons.Default.Draw, "Pen", tool.tool == Tool.PEN) { pick(Tool.PEN) }
-        ToolButton(Icons.Default.BorderColor, "Highlighter", tool.tool == Tool.HIGHLIGHTER) { pick(Tool.HIGHLIGHTER) }
-        ToolButton(Icons.Default.AutoFixNormal, "Eraser", tool.tool == Tool.ERASER) { pick(Tool.ERASER) }
-        ToolButton(Icons.Default.Gesture, "Lasso", tool.tool == Tool.LASSO) { pick(Tool.LASSO) }
-        ToolButton(Icons.Default.HorizontalRule, "Line", tool.tool == Tool.LINE) { pick(Tool.LINE) }
-        ToolButton(Icons.Default.Category, "Shapes", tool.tool == Tool.SHAPE) { pick(Tool.SHAPE) }
-        ToolButton(Icons.Default.TextFields, "Text", tool.tool == Tool.TEXT) { pick(Tool.TEXT) }
+        IconButton(onClick = onUndo, enabled = canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, "Undo") }
+        IconButton(onClick = onRedo, enabled = canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, "Redo") }
+        if (vertical) HorizontalDivider(Modifier.width(32.dp).padding(vertical = 6.dp))
+        else VerticalDivider(Modifier.height(32.dp).padding(horizontal = 6.dp))
+        fun pick(t: Tool) { if (tool.tool == t) { if (t != Tool.LASSO) optionsAt = "tool" } else { optionsAt = null; onChange(tool.copy(tool = t)) } }
+        @Composable fun T(icon: ImageVector, label: String, t: Tool) = Box {
+            ToolButton(icon, label, tool.tool == t) { pick(t) }
+            if (tool.tool == t) ToolOptionsPopup(optionsAt == "tool", tool, onChange) { optionsAt = null }
+        }
+        T(Icons.Default.Draw, "Pen", Tool.PEN)
+        T(Icons.Default.BorderColor, "Highlighter", Tool.HIGHLIGHTER)
+        T(Icons.Default.AutoFixNormal, "Eraser", Tool.ERASER)
+        T(Icons.Default.Gesture, "Lasso", Tool.LASSO)
+        T(Icons.Default.HorizontalRule, "Line", Tool.LINE)
+        T(Icons.Default.Category, "Shapes", Tool.SHAPE)
+        T(Icons.Default.TextFields, "Text", Tool.TEXT)
+        IconButton(onClick = onImage) { Icon(Icons.Default.AddPhotoAlternate, "Insert image") }
         if (vertical) HorizontalDivider(Modifier.width(32.dp).padding(vertical = 6.dp))
         else VerticalDivider(Modifier.height(32.dp).padding(horizontal = 6.dp))
         when (tool.tool) {
@@ -674,8 +732,9 @@ private fun ToolBar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (tool.tool != Tool.LASSO) {
-            IconButton(onClick = onOptions) { Icon(Icons.Default.Tune, "Tool options") }
+        if (tool.tool != Tool.LASSO) Box {
+            IconButton(onClick = { optionsAt = "tune" }) { Icon(Icons.Default.Tune, "Tool options") }
+            ToolOptionsPopup(optionsAt == "tune", tool, onChange) { optionsAt = null }
         }
     }
     val pill = RoundedCornerShape(28.dp)
@@ -709,19 +768,17 @@ private fun ToolButton(icon: ImageVector, label: String, selected: Boolean, onCl
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun ToolOptionsDialog(tool: ToolState, onChange: (ToolState) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
-        title = {
-            Text(
+private fun ToolOptionsPopup(expanded: Boolean, tool: ToolState, onChange: (ToolState) -> Unit, onDismiss: () -> Unit) {
+    // Opens next to the tool's icon in the toolbar instead of as a dialog in the middle of the screen.
+    DropdownMenu(expanded, onDismiss, Modifier.widthIn(min = 260.dp, max = 340.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+            Text(style = MaterialTheme.typography.titleSmall, text =
                 when (tool.tool) {
                     Tool.PEN -> "Pen"; Tool.HIGHLIGHTER -> "Highlighter"; Tool.ERASER -> "Eraser"
                     Tool.LASSO -> "Lasso"; Tool.LINE -> "Line"; Tool.SHAPE -> "Shapes"; Tool.TEXT -> "Text"
                 }
             )
-        },
-        text = {
+            Spacer(Modifier.height(8.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 when (tool.tool) {
                     Tool.PEN, Tool.LINE, Tool.SHAPE, Tool.TEXT -> {
@@ -761,8 +818,8 @@ private fun ToolOptionsDialog(tool: ToolState, onChange: (ToolState) -> Unit, on
                     }
                 }
             }
-        },
-    )
+        }
+    }
 }
 
 @Composable

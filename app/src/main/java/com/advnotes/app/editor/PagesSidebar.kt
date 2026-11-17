@@ -77,7 +77,8 @@ private fun renderThumb(nb: Notebook, page: Page, widthPx: Int, pressureCurve: F
     val s = widthPx / PAGE_WIDTH
     c.scale(s, s)
     val bg = page.background?.let { Backgrounds.getThumb(nb.id, it, widthPx * 2, onBgReady) }
-    StrokeRenderer(pressureCurve).drawPage(c, page, nb.paper, nb.paperColor, background = bg)
+    StrokeRenderer(pressureCurve).drawPage(c, page, nb.paper, nb.paperColor, background = bg,
+        images = { Backgrounds.getThumb(nb.id, com.advnotes.app.model.PageBackground(it.asset), widthPx, onBgReady) })
     return bmp
 }
 

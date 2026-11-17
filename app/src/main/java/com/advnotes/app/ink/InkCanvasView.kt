@@ -99,6 +99,9 @@ class InkCanvasView(context: Context) : View(context) {
             field = value
             // A page coming from outside (undo/redo, page switch) invalidates the selection box.
             if (!committing) clearSelection()
+            pendingSelectImage?.let { id ->
+                if (value.images.any { it.id == id }) { pendingSelectImage = null; post { setSelection(emptySet(), emptySet(), setOf(id)) } }
+            }
             layerDirty = true
             invalidate()
         }
@@ -122,6 +125,14 @@ class InkCanvasView(context: Context) : View(context) {
 
     /** Owning notebook, used to resolve imported page backgrounds. */
     var notebookId: String = ""
+
+    /** Placed pictures, loaded in the background; the page redraws when one is ready. */
+    private val liveImages: (com.advnotes.app.model.ImageBox) -> Bitmap? = { im ->
+        Backgrounds.get(notebookId, com.advnotes.app.model.PageBackground(im.asset)) { layerDirty = true; invalidate() }
+    }
+    private val nowImages: (com.advnotes.app.model.ImageBox) -> Bitmap? = { im ->
+        Backgrounds.renderNow(notebookId, com.advnotes.app.model.PageBackground(im.asset))
+    }
 
     private fun backgroundBitmap(): Bitmap? {
         val bg = page.background ?: return null
@@ -205,9 +216,11 @@ class InkCanvasView(context: Context) : View(context) {
     private var lastEX = 0f; private var lastEY = 0f
 
     // selection
-    private class Selection(val strokeIds: Set<String>, val textIds: Set<String>, val bounds: RectF) {
-        val ids get() = strokeIds + textIds
+    private class Selection(val strokeIds: Set<String>, val textIds: Set<String>, val bounds: RectF, val imageIds: Set<String> = emptySet()) {
+        val ids get() = strokeIds + textIds + imageIds
     }
+    /** Image to select as soon as a page containing it arrives (right after inserting one). */
+    var pendingSelectImage: String? = null
     private var selection: Selection? = null
     private var selDx = 0f; private var selDy = 0f; private var selScale = 1f
 
@@ -293,7 +306,7 @@ class InkCanvasView(context: Context) : View(context) {
         val sh = 3f / scale
         c.drawRect(sh, sh * 2, PAGE_WIDTH + sh, page.height + sh * 2, shadowPaint)
         c.clipRect(0f, 0f, PAGE_WIDTH, page.height)
-        renderer.drawPage(c, pageToDraw, paperStyle, paperColor, excluded(), background = backgroundBitmap())
+        renderer.drawPage(c, pageToDraw, paperStyle, paperColor, excluded(), background = backgroundBitmap(), images = liveImages)
         c.restore()
     }
 
@@ -378,6 +391,7 @@ class InkCanvasView(context: Context) : View(context) {
             canvas.save()
             canvas.translate(selDx, selDy)
             canvas.scale(selScale, selScale, sel.bounds.left, sel.bounds.top)
+            for (im in page.images) if (im.id in sel.imageIds) renderer.drawImage(canvas, im, liveImages(im))
             for (s in page.strokes) if (s.kind == InkKind.HIGHLIGHTER && s.id in sel.strokeIds) renderer.draw(canvas, s)
             for (s in page.strokes) if (s.kind == InkKind.PEN && s.id in sel.strokeIds) renderer.draw(canvas, s)
             for (t in page.texts) if (t.id in sel.textIds) renderer.drawText(canvas, t)
@@ -870,7 +884,8 @@ class InkCanvasView(context: Context) : View(context) {
         val texts = page.texts.filter { t ->
             Geometry.pointInPolygon(t.x + t.width / 2, t.y + renderer.textHeight(t) / 2, poly)
         }
-        if (strokes.isEmpty() && texts.isEmpty()) {
+        val images = page.images.filter { im -> Geometry.pointInPolygon(im.x + im.w / 2, im.y + im.h / 2, poly) }
+        if (strokes.isEmpty() && texts.isEmpty() && images.isEmpty()) {
             // On an imported page, circling printed content selects that region (for Solve / To text).
             if (page.background != null) {
                 var l = Float.MAX_VALUE; var t = Float.MAX_VALUE; var r = -Float.MAX_VALUE; var b = -Float.MAX_VALUE
@@ -885,10 +900,10 @@ class InkCanvasView(context: Context) : View(context) {
             }
             return
         }
-        setSelection(strokes.map { it.id }.toSet(), texts.map { it.id }.toSet())
+        setSelection(strokes.map { it.id }.toSet(), texts.map { it.id }.toSet(), images.map { it.id }.toSet())
     }
 
-    private fun setSelection(strokeIds: Set<String>, textIds: Set<String>) {
+    private fun setSelection(strokeIds: Set<String>, textIds: Set<String>, imageIds: Set<String> = emptySet()) {
         val b = RectF()
         var first = true
         val tmp = RectF()
@@ -899,9 +914,13 @@ class InkCanvasView(context: Context) : View(context) {
             tmp.set(t.x, t.y, t.x + t.width, t.y + renderer.textHeight(t))
             if (first) { b.set(tmp); first = false } else b.union(tmp)
         }
+        for (im in page.images) if (im.id in imageIds) {
+            tmp.set(im.x, im.y, im.x + im.w, im.y + im.h)
+            if (first) { b.set(tmp); first = false } else b.union(tmp)
+        }
         if (first) { clearSelection(); return }
         b.inset(-6f, -6f)
-        selection = Selection(strokeIds, textIds, b)
+        selection = Selection(strokeIds, textIds, b, imageIds)
         selDx = 0f; selDy = 0f; selScale = 1f
         layerDirty = true
         notifySelection()
@@ -924,9 +943,12 @@ class InkCanvasView(context: Context) : View(context) {
                 t.copy(x = nx, y = ny, width = t.width * sc, size = t.size * sc)
             } else t
         }
+        val images = page.images.map { im ->
+            if (im.id in sel.imageIds) im.copy(x = ox + (im.x - ox) * sc + dx, y = oy + (im.y - oy) * sc + dy, w = im.w * sc, h = im.h * sc) else im
+        }
         selDx = 0f; selDy = 0f; selScale = 1f
-        commit(page.copy(strokes = strokes, texts = texts))
-        setSelection(sel.strokeIds, sel.textIds)
+        commit(page.copy(strokes = strokes, texts = texts, images = images))
+        setSelection(sel.strokeIds, sel.textIds, sel.imageIds)
     }
 
     fun hasSelection() = selection != null
@@ -943,7 +965,8 @@ class InkCanvasView(context: Context) : View(context) {
     fun deleteSelection() {
         val sel = selection ?: return
         selection = null
-        commit(page.copy(strokes = page.strokes.filter { it.id !in sel.strokeIds }, texts = page.texts.filter { it.id !in sel.textIds }))
+        commit(page.copy(strokes = page.strokes.filter { it.id !in sel.strokeIds }, texts = page.texts.filter { it.id !in sel.textIds },
+            images = page.images.filter { it.id !in sel.imageIds }))
         listener?.onSelectionChanged(null)
     }
 
@@ -952,8 +975,9 @@ class InkCanvasView(context: Context) : View(context) {
         val off = 24f
         val ns = page.strokes.filter { it.id in sel.strokeIds }.map { it.translated(off, off).copy(id = newId()) }
         val nt = page.texts.filter { it.id in sel.textIds }.map { it.translated(off, off).copy(id = newId()) }
-        commit(page.copy(strokes = page.strokes + ns, texts = page.texts + nt))
-        setSelection(ns.map { it.id }.toSet(), nt.map { it.id }.toSet())
+        val ni = page.images.filter { it.id in sel.imageIds }.map { it.translated(off, off).copy(id = newId()) }
+        commit(page.copy(strokes = page.strokes + ns, texts = page.texts + nt, images = page.images + ni))
+        setSelection(ns.map { it.id }.toSet(), nt.map { it.id }.toSet(), ni.map { it.id }.toSet())
     }
 
     fun recolorSelection(color: Int) {
@@ -987,9 +1011,10 @@ class InkCanvasView(context: Context) : View(context) {
         // A region selection (no ink) sends everything in the area; otherwise only the selected ink,
         // on top of the imported page background if there is one.
         val excluded = if (sel.ids.isEmpty()) emptySet() else
-            page.strokes.filter { it.id !in sel.strokeIds }.map { it.id }.toSet() + page.texts.filter { it.id !in sel.textIds }.map { it.id }
+            page.strokes.filter { it.id !in sel.strokeIds }.map { it.id }.toSet() + page.texts.filter { it.id !in sel.textIds }.map { it.id } +
+                page.images.filter { it.id !in sel.imageIds }.map { it.id }
         val bg = page.background?.let { Backgrounds.renderNow(notebookId, it) }
-        renderer.drawPage(c, page, paperStyle, paperColor, excluded, drawPaper = false, background = bg)
+        renderer.drawPage(c, page, paperStyle, paperColor, excluded, drawPaper = false, background = bg, images = nowImages)
         return bmp
     }
 
@@ -1008,7 +1033,7 @@ class InkCanvasView(context: Context) : View(context) {
         c.scale(s, s)
         c.translate(-region.left, -region.top)
         val bg = page.background?.let { Backgrounds.renderNow(notebookId, it) }
-        renderer.drawPage(c, page, paperStyle, paperColor, background = bg)
+        renderer.drawPage(c, page, paperStyle, paperColor, background = bg, images = nowImages)
         return bmp
     }
 
@@ -1041,7 +1066,7 @@ class InkCanvasView(context: Context) : View(context) {
     private fun notifySelection() {
         val sel = selection ?: return
         val r = selViewRect(sel)
-        listener?.onSelectionChanged(SelectionInfo(r.left, r.top, r.right, r.bottom, sel.strokeIds.size + sel.textIds.size))
+        listener?.onSelectionChanged(SelectionInfo(r.left, r.top, r.right, r.bottom, sel.strokeIds.size + sel.textIds.size + sel.imageIds.size))
     }
 
     override fun onDetachedFromWindow() {

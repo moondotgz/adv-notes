@@ -95,6 +95,19 @@ data class TextBox(
 @Serializable
 data class PageBackground(val asset: String, val pdfPage: Int = -1)
 
+/** A picture placed on the page; [asset] is a file in the notebook's asset folder. Coordinates in page units. */
+@Serializable
+data class ImageBox(
+    val id: String = newId(),
+    val asset: String,
+    val x: Float,
+    val y: Float,
+    val w: Float,
+    val h: Float,
+) {
+    fun translated(dx: Float, dy: Float) = copy(x = x + dx, y = y + dy)
+}
+
 @Serializable
 data class Page(
     val id: String = newId(),
@@ -105,6 +118,8 @@ data class Page(
     /** Page height in page units; the width is always [PAGE_WIDTH]. Imported pages keep their aspect ratio. */
     val height: Float = PAGE_HEIGHT,
     val background: PageBackground? = null,
+    /** Pictures placed on the page, drawn above the paper/background and below the ink. */
+    val images: List<ImageBox> = emptyList(),
 )
 
 @Serializable
