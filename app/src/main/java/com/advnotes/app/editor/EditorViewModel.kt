@@ -61,7 +61,22 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         if (_ui.value.notebook?.id == id) return
         viewModelScope.launch {
             val nb = a.repo.load(id) ?: return@launch
-            _ui.value = EditorUi(nb, 0)
+            val savedId = lastPagePrefs.getString(id, null)
+            val start = nb.pages.indexOfFirst { it.id == savedId }.takeIf { it >= 0 } ?: 0
+            _ui.value = EditorUi(nb, start)
+        }
+    }
+
+    /** Remembers the page each notebook was left on (device-local, not synced). */
+    private val lastPagePrefs = app.getSharedPreferences("last_page", android.content.Context.MODE_PRIVATE)
+
+    init {
+        viewModelScope.launch {
+            _ui.collect { s ->
+                val nb = s.notebook ?: return@collect
+                val pid = nb.pages.getOrNull(s.pageIndex)?.id ?: return@collect
+                if (lastPagePrefs.getString(nb.id, null) != pid) lastPagePrefs.edit().putString(nb.id, pid).apply()
+            }
         }
     }
 
