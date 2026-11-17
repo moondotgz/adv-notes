@@ -13,6 +13,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -95,7 +96,7 @@ fun ToolPanel(
                 IconButton(onClick = onHide, Modifier.align(Alignment.CenterEnd)) { Icon(Icons.Default.KeyboardArrowDown, "Hide panel") }
             }
             HorizontalDivider()
-            Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+            Box(Modifier.weight(1f).fillMaxWidth().imePadding().clipToBounds()) {
                 for (id in state.open) {
                     val t = tools.firstOrNull { it.id == id } ?: continue
                     key(id) {
