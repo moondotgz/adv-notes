@@ -205,6 +205,7 @@ class WebTool(
                                 val text = (o["text"] as? JsonPrimitive)?.content ?: return@mapNotNull null
                                 ChatMessage((o["role"] as? JsonPrimitive)?.content != "assistant", text)
                             }.orEmpty()
+                            ToolLog.add(host.toolId, "bridge #$id ai image=${imageArg ?: "none"} -> ${image?.size ?: 0} bytes")
                             val msgs = history + ChatMessage(true, prompt, listOfNotNull(image))
                             val text = host.ai().complete(VisionRequest(system, msgs)) { partial -> js("AdvNotes._progress($id, ${quote(partial)})") }
                             quote(text)
