@@ -34,6 +34,7 @@ import kotlin.math.sin
 enum class Tool { PEN, HIGHLIGHTER, ERASER, LASSO, LINE, SHAPE, TEXT }
 enum class EraserMode { STROKE, PARTIAL }
 
+@kotlinx.serialization.Serializable
 data class ToolState(
     val tool: Tool = Tool.PEN,
     val penColor: Int = 0xFF1A1A1A.toInt(),

@@ -45,7 +45,12 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private val _ui = MutableStateFlow(EditorUi())
     val ui: StateFlow<EditorUi> = _ui
 
-    private val _tool = MutableStateFlow(ToolState())
+    /** Pen, highlighter, eraser and shape settings are shared by all notebooks and kept across restarts. */
+    private val toolPrefs = app.getSharedPreferences("tool_state", android.content.Context.MODE_PRIVATE)
+    private val _tool = MutableStateFlow(
+        runCatching { com.advnotes.app.data.AppJson.decodeFromString(ToolState.serializer(), toolPrefs.getString("state", null)!!) }
+            .getOrDefault(ToolState())
+    )
     val tool: StateFlow<ToolState> = _tool
 
     private val _ai = MutableStateFlow<AiState>(AiState.Idle)
@@ -82,7 +87,11 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     val currentPage: Page? get() = _ui.value.notebook?.pages?.getOrNull(_ui.value.pageIndex)
 
-    fun setTool(t: ToolState) { _tool.value = t }
+    fun setTool(t: ToolState) {
+        if (_tool.value == t) return
+        _tool.value = t
+        toolPrefs.edit().putString("state", com.advnotes.app.data.AppJson.encodeToString(ToolState.serializer(), t)).apply()
+    }
 
     private fun refreshUndoFlags() {
         val id = currentPage?.id
