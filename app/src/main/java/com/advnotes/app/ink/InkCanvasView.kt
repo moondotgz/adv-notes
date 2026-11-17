@@ -31,7 +31,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-enum class Tool { PEN, HIGHLIGHTER, ERASER, LASSO, SHAPE, TEXT }
+enum class Tool { PEN, HIGHLIGHTER, ERASER, LASSO, LINE, SHAPE, TEXT }
 enum class EraserMode { STROKE, PARTIAL }
 
 data class ToolState(
@@ -387,7 +387,7 @@ class InkCanvasView(context: Context) : View(context) {
         when (mode) {
             Mode.DRAW -> if (pts.points > 0) renderer.draw(canvas, liveStroke(), live = true)
             Mode.SNAPPED -> snapped.forEach { renderer.draw(canvas, shapeStroke(it, drawKind, drawColor, drawWidth), live = true) }
-            Mode.SHAPE -> ShapeFactory.make(tool.shape, startX, startY, curX, curY).forEach {
+            Mode.SHAPE -> shapeNow().forEach {
                 renderer.draw(canvas, shapeStroke(it, InkKind.PEN, tool.penColor, tool.penWidth), live = true)
             }
             else -> Unit
@@ -436,6 +436,23 @@ class InkCanvasView(context: Context) : View(context) {
             return shapeStroke(a, drawKind, drawColor, drawWidth)
         }
         return Stroke(id = "live", kind = drawKind, color = drawColor, width = drawWidth, pts = pts.toArray(), pressure = drawPressure)
+    }
+
+    /** The shape being dragged out; the Line tool snaps to 0°/45°/90° when within a few degrees. */
+    private fun shapeNow(): List<FloatArray> {
+        if (tool.tool != Tool.LINE) return ShapeFactory.make(tool.shape, startX, startY, curX, curY)
+        var ex = curX; var ey = curY
+        val dx = ex - startX; val dy = ey - startY
+        val len = hypot(dx, dy)
+        if (len > 0f) {
+            val ang = Math.toDegrees(atan2(dy, dx).toDouble())
+            val snap = Math.round(ang / 45.0) * 45.0
+            if (abs(ang - snap) < 4.0) {
+                val rad = Math.toRadians(snap)
+                ex = startX + (len * cos(rad)).toFloat(); ey = startY + (len * sin(rad)).toFloat()
+            }
+        }
+        return ShapeFactory.make(ShapeKind.LINE, startX, startY, ex, ey)
     }
 
     private fun shapeStroke(xy: FloatArray, kind: InkKind, color: Int, width: Float): Stroke {
@@ -642,7 +659,7 @@ class InkCanvasView(context: Context) : View(context) {
                 mode = Mode.LASSO
                 lassoPts.clear(); lassoPts += x; lassoPts += y
             }
-            Tool.SHAPE -> mode = Mode.SHAPE
+            Tool.SHAPE, Tool.LINE -> mode = Mode.SHAPE
             Tool.TEXT -> mode = Mode.TEXT
         }
         invalidate()
@@ -802,7 +819,7 @@ class InkCanvasView(context: Context) : View(context) {
             }
             Mode.SHAPE -> {
                 if (hypot(curX - startX, curY - startY) > 3f) {
-                    val s = ShapeFactory.make(tool.shape, startX, startY, curX, curY)
+                    val s = shapeNow()
                         .map { shapeStroke(it, InkKind.PEN, tool.penColor, tool.penWidth) }
                     commit(page.copy(strokes = page.strokes + s))
                 }

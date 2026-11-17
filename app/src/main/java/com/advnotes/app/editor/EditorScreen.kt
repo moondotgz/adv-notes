@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoFixNormal
 import androidx.compose.material.icons.filled.BorderColor
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.HorizontalRule
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -651,12 +652,13 @@ private fun ToolBar(
         ToolButton(Icons.Default.BorderColor, "Highlighter", tool.tool == Tool.HIGHLIGHTER) { pick(Tool.HIGHLIGHTER) }
         ToolButton(Icons.Default.AutoFixNormal, "Eraser", tool.tool == Tool.ERASER) { pick(Tool.ERASER) }
         ToolButton(Icons.Default.Gesture, "Lasso", tool.tool == Tool.LASSO) { pick(Tool.LASSO) }
+        ToolButton(Icons.Default.HorizontalRule, "Line", tool.tool == Tool.LINE) { pick(Tool.LINE) }
         ToolButton(Icons.Default.Category, "Shapes", tool.tool == Tool.SHAPE) { pick(Tool.SHAPE) }
         ToolButton(Icons.Default.TextFields, "Text", tool.tool == Tool.TEXT) { pick(Tool.TEXT) }
         if (vertical) HorizontalDivider(Modifier.width(32.dp).padding(vertical = 6.dp))
         else VerticalDivider(Modifier.height(32.dp).padding(horizontal = 6.dp))
         when (tool.tool) {
-            Tool.PEN, Tool.SHAPE, Tool.TEXT -> PEN_COLORS.forEach { c ->
+            Tool.PEN, Tool.LINE, Tool.SHAPE, Tool.TEXT -> PEN_COLORS.forEach { c ->
                 ColorDot(c, c == tool.penColor) { onChange(tool.copy(penColor = c)) }
             }
             Tool.HIGHLIGHTER -> HIGHLIGHTER_COLORS.forEach { c ->
@@ -715,14 +717,14 @@ private fun ToolOptionsDialog(tool: ToolState, onChange: (ToolState) -> Unit, on
             Text(
                 when (tool.tool) {
                     Tool.PEN -> "Pen"; Tool.HIGHLIGHTER -> "Highlighter"; Tool.ERASER -> "Eraser"
-                    Tool.LASSO -> "Lasso"; Tool.SHAPE -> "Shapes"; Tool.TEXT -> "Text"
+                    Tool.LASSO -> "Lasso"; Tool.LINE -> "Line"; Tool.SHAPE -> "Shapes"; Tool.TEXT -> "Text"
                 }
             )
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 when (tool.tool) {
-                    Tool.PEN, Tool.SHAPE, Tool.TEXT -> {
+                    Tool.PEN, Tool.LINE, Tool.SHAPE, Tool.TEXT -> {
                         Text("Thickness: ${"%.1f".format(tool.penWidth)}")
                         Slider(tool.penWidth, { onChange(tool.copy(penWidth = it)) }, valueRange = 1f..20f)
                         if (tool.tool == Tool.PEN) Text(
