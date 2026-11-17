@@ -148,6 +148,8 @@ class WebTool(
         private val main = Handler(Looper.getMainLooper())
 
         private fun <T> onMain(block: () -> T): T? {
+            // Already on the main thread (coroutines on Dispatchers.Main): posting and waiting would deadlock.
+            if (Looper.myLooper() == Looper.getMainLooper()) return runCatching(block).getOrNull()
             var r: T? = null
             val latch = CountDownLatch(1)
             main.post { r = runCatching(block).getOrNull(); latch.countDown() }
@@ -163,7 +165,9 @@ class WebTool(
         private fun decodeDataUrl(s: String): ByteArray? =
             s.substringAfter("base64,", "").takeIf { it.isNotEmpty() }?.let { Base64.decode(it, Base64.DEFAULT) }
 
-        private fun js(code: String) = main.post { web.evaluateJavascript(code) { ToolLog.add(host.toolId, "eval ${code.take(40)} -> $it") } }
+        private fun js(code: String) = main.post {
+            web.evaluateJavascript(code) { if (!code.startsWith("AdvNotes._progress")) ToolLog.add(host.toolId, "eval ${code.take(40)} -> $it") }
+        }
         private fun resolve(id: Int, ok: Boolean, payloadJson: String) = js("AdvNotes._resolve($id, $ok, $payloadJson)")
         private fun quote(s: String) = JsonPrimitive(s).toString()
 
@@ -191,7 +195,9 @@ class WebTool(
                             val image: ByteArray? = when {
                                 imageArg == null -> null
                                 imageArg == "selection" -> onMain { host.selectionImage() }?.let { png(it) }
+                                    ?: throw IllegalStateException("Select something with the lasso first.")
                                 imageArg == "page" -> onMain { host.pageImage() }?.let { png(it) }
+                                    ?: throw IllegalStateException("Couldn't capture the visible page.")
                                 else -> decodeDataUrl(imageArg)
                             }
                             val history = (args["history"] as? JsonArray)?.mapNotNull { h ->
