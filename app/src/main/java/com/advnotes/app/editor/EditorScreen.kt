@@ -403,6 +403,17 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                                     if (nav == "VERTICAL" && lastSwipe < 0) v.scrollToBottom() else v.scrollToTop()
                                 }
                             }
+                            v.swipeLabel = { dir ->
+                                val st = vm.ui.value; val book = st.notebook
+                                val step = if (app.settings.state.value.pageNav == "TWO_PAGE") 2 else 1
+                                val target = st.pageIndex - st.pageIndex % step + dir * step
+                                when {
+                                    book == null || target < 0 -> null
+                                    target < book.pages.size -> if (dir > 0) "Next page" else "Previous page"
+                                    book.lockPages -> null
+                                    else -> "New page"
+                                }
+                            }
                             v.swipeAxis = when (nav) { "HORIZONTAL", "TWO_PAGE" -> 1; "VERTICAL" -> 2; else -> 0 }
                             v.tool = tool
                             v.prefs = InputPrefs(settings.fingerMode, settings.penButton, settings.pressureCurve, settings.holdToShape)
@@ -530,9 +541,9 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
     if (showNav) {
         val opts = listOf(
             "ARROWS" to "Arrows and new-page button",
-            "HORIZONTAL" to "Horizontal – swipe sideways, past the last page for a new one",
+            "HORIZONTAL" to "Horizontal – swipe sideways, pull well past the last page for a new one",
             "TWO_PAGE" to "Two pages side by side – swipe sideways",
-            "VERTICAL" to "Vertical – swipe up/down, past the last page for a new one",
+            "VERTICAL" to "Vertical – swipe up/down, pull well past the last page for a new one",
         )
         AlertDialog(
             onDismissRequest = { showNav = false },

@@ -27,6 +27,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -96,6 +99,12 @@ fun PagesSidebar(
     var chooserFor by remember { mutableStateOf<Int?>(null) }          // page index whose groups are being edited
     var newGroup by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<PageGroup?>(null) }
+    var selecting by remember { mutableStateOf(false) }
+    var picked by remember { mutableStateOf(setOf<String>()) }
+    var confirmDelete by remember { mutableStateOf<Set<String>?>(null) }
+    // Forget picks for pages that no longer exist.
+    val liveIds = nb.pages.map { it.id }.toSet()
+    if (!liveIds.containsAll(picked)) picked = picked intersect liveIds
     val group = nb.groups.firstOrNull { it.id == filter }
     if (filter != null && group == null) filter = null                 // the group was deleted
 
@@ -112,7 +121,13 @@ fun PagesSidebar(
     Surface(modifier, tonalElevation = 2.dp, shadowElevation = 2.dp) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Pages", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text(if (selecting) "${picked.size} selected" else "Pages", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                if (selecting) {
+                    IconButton(onClick = { confirmDelete = picked }, Modifier.size(40.dp), enabled = picked.isNotEmpty() && !nb.lockPages) {
+                        Icon(Icons.Default.Delete, "Delete selected pages")
+                    }
+                    TextButton(onClick = { selecting = false; picked = emptySet() }) { Text("Done") }
+                } else if (!nb.lockPages) TextButton(onClick = { selecting = true }) { Text("Select") }
                 IconButton(onClick = onClose, Modifier.size(40.dp)) { Icon(Icons.Default.Close, "Close pages") }
             }
             LazyRow(Modifier.fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -151,7 +166,14 @@ fun PagesSidebar(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(indices, key = { nb.pages[it].id }) { i ->
-                    PageItem(nb, i, selected = i == pageIndex, pressureCurve, onGo = { onGo(i) }, onStar = { chooserFor = i })
+                    val id = nb.pages[i].id
+                    PageItem(
+                        nb, i, selected = i == pageIndex, pressureCurve,
+                        onGo = { if (selecting) picked = if (id in picked) picked - id else picked + id else onGo(i) },
+                        onStar = { chooserFor = i },
+                        picked = if (selecting) id in picked else null,
+                        onDelete = if (nb.lockPages) null else ({ confirmDelete = setOf(id) }),
+                    )
                 }
             }
         }
@@ -161,6 +183,22 @@ fun PagesSidebar(
         val page = nb.pages.getOrNull(i)
         if (page == null) chooserFor = null
         else GroupChooser(nb, page, i, vm) { chooserFor = null }
+    }
+    confirmDelete?.let { ids ->
+        val n = ids.size
+        val label = if (n == 1) "page ${nb.pages.indexOfFirst { it.id in ids } + 1}" else "$n pages"
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text("Delete $label?") },
+            text = { Text("This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deletePages(ids); confirmDelete = null
+                    picked = picked - ids; if (selecting && n > 1) selecting = false
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
+        )
     }
     if (newGroup) NameDialog("New group", "e.g. Exam, To review", "") { name ->
         newGroup = false
@@ -172,7 +210,10 @@ fun PagesSidebar(
 }
 
 @Composable
-private fun PageItem(nb: Notebook, index: Int, selected: Boolean, pressureCurve: Float, onGo: () -> Unit, onStar: () -> Unit) {
+private fun PageItem(
+    nb: Notebook, index: Int, selected: Boolean, pressureCurve: Float, onGo: () -> Unit, onStar: () -> Unit,
+    picked: Boolean? = null, onDelete: (() -> Unit)? = null,
+) {
     val page = nb.pages[index]
     val widthPx = with(LocalDensity.current) { 120.dp.roundToPx() }
     var tick by remember { mutableIntStateOf(0) }
@@ -202,6 +243,17 @@ private fun PageItem(nb: Notebook, index: Int, selected: Boolean, pressureCurve:
                     tint = groups.firstOrNull()?.let { Color(it.color).copy(alpha = 1f) }?.takeIf { groups.isNotEmpty() } ?: Color.White,
                 )
             }
+            if (picked != null) {
+                if (picked) Box(Modifier.matchParentSize().background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)))
+                Icon(
+                    if (picked) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, null,
+                    Modifier.align(Alignment.TopStart).padding(5.dp).size(24.dp).background(Color.White, CircleShape),
+                    tint = if (picked) MaterialTheme.colorScheme.primary else Color.Gray,
+                )
+            } else if (onDelete != null) IconButton(
+                onClick = onDelete,
+                Modifier.align(Alignment.TopStart).padding(3.dp).size(30.dp).background(Color.Black.copy(alpha = 0.38f), CircleShape),
+            ) { Icon(Icons.Default.Delete, "Delete page ${index + 1}", Modifier.size(18.dp), tint = Color.White) }
             if (groups.isNotEmpty()) Row(Modifier.align(Alignment.BottomStart).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                 groups.forEach { g -> Box(Modifier.size(9.dp).background(Color(g.color), CircleShape).border(1.dp, Color.White, CircleShape)) }
             }

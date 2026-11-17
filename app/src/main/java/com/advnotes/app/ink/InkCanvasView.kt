@@ -79,6 +79,15 @@ class InkCanvasView(context: Context) : View(context) {
     var swipeAxis = 0
     private var overX = 0f
     private var overY = 0f
+    /** Whether this gesture ever pinched; pinching never turns pages. */
+    private var navPinched = false
+    private var navStartScale = 1f
+    private var swipeAnim: android.animation.ValueAnimator? = null
+    /** Label for the page a swipe would go to (+1 forward, -1 back), or null when there is none. */
+    var swipeLabel: (Int) -> String? = { null }
+    private val swipeThreshold get() = 170f * density
+    private val labelPaint by lazy { Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 15f * density; textAlign = Paint.Align.CENTER; isFakeBoldText = true } }
+    private val pillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     var listener: Listener? = null
     val renderer = StrokeRenderer()
@@ -289,9 +298,59 @@ class InkCanvasView(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         val rubber = overX != 0f || overY != 0f
-        if (rubber) { canvas.save(); canvas.translate(overX * 0.4f, overY * 0.4f) }
+        if (rubber) { canvas.save(); canvas.translate(rubberOf(overX), rubberOf(overY)) }
         drawContent(canvas)
-        if (rubber) canvas.restore()
+        if (rubber) { canvas.restore(); if (mode == Mode.NAVIGATE) drawSwipeHint(canvas) }
+    }
+
+    /** Resisting displacement: follows the finger at first, then stiffens. */
+    private fun rubberOf(o: Float): Float {
+        if (o == 0f) return 0f
+        val lim = swipeThreshold * 0.9f
+        val a = abs(o)
+        return Math.signum(o) * lim * (1f - 1f / (a * 0.55f / lim + 1f))
+    }
+
+    private fun drawSwipeHint(c: Canvas) {
+        val over = if (swipeAxis == 1) overX else overY
+        if (abs(over) < 24f * density) return
+        val dir = if (over < 0) 1 else -1
+        val label = swipeLabel(dir) ?: return
+        val armed = abs(over) >= swipeThreshold
+        val progress = (abs(over) / swipeThreshold).coerceIn(0f, 1f)
+        val text = if (armed) "Release: $label" else label
+        val shift = rubberOf(over)
+        val gap = abs(shift)
+        val cx: Float; val cy: Float
+        if (swipeAxis == 1) { cy = height / 2f; cx = if (dir > 0) width - gap / 2f else gap / 2f }
+        else { cx = width / 2f; cy = if (dir > 0) height - gap / 2f else gap / 2f }
+        val tw = labelPaint.measureText(text)
+        val ph = 34f * density
+        val pw = tw + 28f * density
+        val dark = paperColor.dark
+        val alpha = (progress * 255).toInt()
+        pillPaint.color = if (armed) 0xFF3B82F6.toInt() else if (dark) 0xFF2A2D33.toInt() else 0xFFFFFFFF.toInt()
+        pillPaint.alpha = alpha
+        labelPaint.color = if (armed) 0xFFFFFFFF.toInt() else if (dark) 0xFFE6E6E6.toInt() else 0xFF33363C.toInt()
+        labelPaint.alpha = alpha
+        c.save()
+        if (swipeAxis == 1) c.rotate(if (dir > 0) -90f else 90f, cx, cy)
+        val rr = RectF(cx - pw / 2, cy - ph / 2, cx + pw / 2, cy + ph / 2)
+        c.drawRoundRect(rr, ph / 2, ph / 2, pillPaint)
+        c.drawText(text, cx, cy - (labelPaint.ascent() + labelPaint.descent()) / 2, labelPaint)
+        c.restore()
+    }
+
+    /** Animates the rubber-band offset from its current value to zero. */
+    private fun settleOver(fromX: Float, fromY: Float, duration: Long = 260) {
+        swipeAnim?.cancel()
+        if (fromX == 0f && fromY == 0f) { overX = 0f; overY = 0f; invalidate(); return }
+        swipeAnim = android.animation.ValueAnimator.ofFloat(1f, 0f).apply {
+            this.duration = duration
+            interpolator = android.view.animation.DecelerateInterpolator(1.6f)
+            addUpdateListener { overX = fromX * (it.animatedValue as Float); overY = fromY * (it.animatedValue as Float); invalidate() }
+            start()
+        }
     }
 
     private fun drawContent(canvas: Canvas) {
@@ -454,7 +513,7 @@ class InkCanvasView(context: Context) : View(context) {
                 invalidate()
             }
             MotionEvent.ACTION_CANCEL -> {
-                overX = 0f; overY = 0f
+                swipeAnim?.cancel(); overX = 0f; overY = 0f
                 cancelInput()
                 mode = Mode.IDLE
                 directDraw = false
@@ -480,13 +539,15 @@ class InkCanvasView(context: Context) : View(context) {
         mode = Mode.NAVIGATE
         directDraw = true
         navDownTime = e.eventTime; navDownX = e.x; navDownY = e.y; navMoved = e.pointerCount > 1
+        swipeAnim?.cancel(); overX = 0f; overY = 0f
+        navPinched = e.pointerCount > 1; navStartScale = scale
         resetNavAnchor(e, skip)
     }
 
     private fun resetNavAnchor(e: MotionEvent, skip: Int) {
         val (cx, cy, span) = centroid(e, skip)
         navCx = cx; navCy = cy; navSpan = span
-        if (e.pointerCount - (if (skip >= 0) 1 else 0) > 1) navMoved = true
+        if (e.pointerCount - (if (skip >= 0) 1 else 0) > 1) { navMoved = true; navPinched = true; overX = 0f; overY = 0f }
     }
 
     private fun navigate(e: MotionEvent) {
@@ -501,16 +562,26 @@ class InkCanvasView(context: Context) : View(context) {
         navCx = cx; navCy = cy; navSpan = span
         val rawTx = tx; val rawTy = ty
         clampViewport()
-        overX = if (swipeAxis == 1) rawTx - tx else 0f
-        overY = if (swipeAxis == 2) rawTy - ty else 0f
+        // Only a plain one-finger drag at the page edge builds up a page swipe.
+        val canSwipe = !navPinched && e.pointerCount == 1
+        overX = if (canSwipe && swipeAxis == 1) rawTx - tx else 0f
+        overY = if (canSwipe && swipeAxis == 2) rawTy - ty else 0f
         notifySelection()
         invalidate()
     }
 
     private fun endNavigate(e: MotionEvent) {
         val over = if (swipeAxis == 1) overX else overY
-        overX = 0f; overY = 0f
-        if (swipeAxis != 0 && abs(over) > 90f * density) listener?.onSwipePage(if (over < 0) 1 else -1)
+        val dir = if (over < 0) 1 else -1
+        val fire = swipeAxis != 0 && !navPinched && abs(over) >= swipeThreshold && swipeLabel(dir) != null
+        if (fire) {
+            overX = 0f; overY = 0f
+            listener?.onSwipePage(dir)
+            // The new page slides in from the side the finger was pulling from.
+            val inset = (if (swipeAxis == 1) width else height) * 0.35f / 0.55f
+            settleOver(if (swipeAxis == 1) -Math.signum(over) * inset * 0.5f else 0f,
+                if (swipeAxis == 2) -Math.signum(over) * inset * 0.5f else 0f, 280)
+        } else settleOver(overX, overY)
         if (!navMoved && e.eventTime - navDownTime < 250) {
             if (e.eventTime - lastTapTime < 350) { fitPage(); lastTapTime = 0 } else lastTapTime = e.eventTime
         }

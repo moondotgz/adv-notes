@@ -2,6 +2,7 @@ package com.advnotes.app.tools
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +25,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AssistChip
@@ -98,6 +111,16 @@ Be concise unless asked for detail. Answer in the language the student writes in
         var job by remember { mutableStateOf<Job?>(null) }
         var error by remember { mutableStateOf<String?>(null) }
         var historyMenu by remember { mutableStateOf(false) }
+        var photo by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+        val context = LocalContext.current
+        var cameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
+        fun loadPhoto(uri: android.net.Uri?) {
+            if (uri == null) return
+            val bmp = loadScaled(context, uri)
+            if (bmp == null) error = "Couldn't open that image." else { photo = bmp; error = null }
+        }
+        val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { loadPhoto(it) }
+        val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> if (ok) loadPhoto(cameraUri) }
         val listState = rememberLazyListState()
 
         fun save(c: Chat) {
@@ -109,23 +132,27 @@ Be concise unless asked for detail. Answer in the language the student writes in
         }
 
         fun send(text: String, attachment: String? = attach) {
-            if (text.isBlank() || streaming != null) return
+            val pic = photo
+            if ((text.isBlank() && pic == null) || streaming != null) return
             error = null
             val image = when (attachment) {
                 "selection" -> host.selectionImage() ?: run { error = "Select something with the lasso first."; return }
                 "page" -> host.pageImage()
                 else -> null
             }
-            val msgs = current.messages + Msg(true, text.trim(), attachment)
-            val title = if (current.messages.isEmpty()) text.trim().take(40) else current.title
+            val images = listOfNotNull(image, pic).map { MathSolver.png(it) }
+            val label = listOfNotNull(attachment, pic?.let { "photo" }).joinToString("+").ifEmpty { null }
+            val prompt = text.trim().ifEmpty { "What's in this photo?" }
+            val msgs = current.messages + Msg(true, prompt, label)
+            val title = if (current.messages.isEmpty()) prompt.take(40) else current.title
             save(current.copy(messages = msgs, title = title, updated = System.currentTimeMillis()))
-            input = ""; attach = null
+            input = ""; attach = null; photo = null
             streaming = ""
             job = scope.launch {
                 try {
                     // Only the newest turn carries the image; earlier ones are text.
                     val history = msgs.mapIndexed { i, m ->
-                        ChatMessage(m.user, m.text, if (i == msgs.size - 1 && image != null) listOf(MathSolver.png(image)) else emptyList())
+                        ChatMessage(m.user, m.text, if (i == msgs.size - 1) images else emptyList())
                     }
                     val answer = host.ai().complete(VisionRequest(SYSTEM, history)) { streaming = it }
                     save(current.copy(messages = current.messages + Msg(false, answer.trim()), updated = System.currentTimeMillis()))
@@ -193,10 +220,29 @@ Be concise unless asked for detail. Answer in the language the student writes in
                 FilterChip(attach == "selection", { attach = if (attach == "selection") null else "selection" }, label = { Text("📎 Selection") })
                 FilterChip(attach == "page", { attach = if (attach == "page") null else "page" }, label = { Text("📎 Visible page") })
             }
+            photo?.let { bmp ->
+                Box(Modifier.padding(start = 12.dp, top = 6.dp)) {
+                    Image(bmp.asImageBitmap(), "Attached photo", Modifier.height(72.dp).widthIn(max = 160.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                    IconButton(onClick = { photo = null }, Modifier.align(Alignment.TopEnd).size(24.dp)
+                        .photoCloseBg()) { Icon(Icons.Default.Close, "Remove photo", Modifier.size(16.dp), tint = androidx.compose.ui.graphics.Color.White) }
+                }
+            }
             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = {
+                    runCatching {
+                        val dir = java.io.File(context.cacheDir, "camera").apply { mkdirs() }
+                        val f = java.io.File(dir, "chat.jpg")
+                        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", f)
+                        cameraUri = uri
+                        takePhoto.launch(uri)
+                    }.onFailure { error = "No camera app available." }
+                }) { Icon(Icons.Default.PhotoCamera, "Take photo") }
+                IconButton(onClick = {
+                    pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                }) { Icon(Icons.Default.PhotoLibrary, "Choose photo") }
                 OutlinedTextField(input, { input = it }, Modifier.weight(1f).heightIn(max = 140.dp), placeholder = { Text("Message") })
                 if (streaming != null) IconButton(onClick = { job?.cancel() }) { Icon(Icons.Default.Stop, "Stop") }
-                else IconButton(onClick = { send(input) }, enabled = input.isNotBlank()) { Icon(Icons.AutoMirrored.Filled.Send, "Send") }
+                else IconButton(onClick = { send(input) }, enabled = input.isNotBlank() || photo != null) { Icon(Icons.AutoMirrored.Filled.Send, "Send") }
             }
         }
     }
@@ -213,7 +259,7 @@ Be concise unless asked for detail. Answer in the language the student writes in
                     modifier = Modifier.widthIn(max = 520.dp).combinedClickable(onClick = {}, onLongClick = { if (!user) menu = true }),
                 ) {
                     Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                        if (attached != null) Text("📎 " + if (attached == "page") "visible page" else "selection",
+                        if (attached != null) Text("📎 " + attached.split("+").joinToString(" + ") { if (it == "page") "visible page" else it },
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (user) Text(text) else SelectionContainer { Text(text) }
                         if (!user) Row {
@@ -231,4 +277,28 @@ Be concise unless asked for detail. Answer in the language the student writes in
             }
         }
     }
+
+    /** Decodes an image, downscaled so its longer side is at most [maxSide] and upright. */
+    private fun loadScaled(context: android.content.Context, uri: android.net.Uri, maxSide: Int = 1600): android.graphics.Bitmap? = runCatching {
+        if (android.os.Build.VERSION.SDK_INT < 28) {
+            val cr = context.contentResolver
+            val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            cr.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, o) }
+            var sample = 1
+            while (maxOf(o.outWidth, o.outHeight) / (sample * 2) >= maxSide) sample *= 2
+            return@runCatching cr.openInputStream(uri)?.use {
+                android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+            }
+        }
+        val src = android.graphics.ImageDecoder.createSource(context.contentResolver, uri)
+        android.graphics.ImageDecoder.decodeBitmap(src) { dec, info, _ ->
+            val w = info.size.width; val h = info.size.height
+            val f = maxSide.toFloat() / maxOf(w, h)
+            if (f < 1f) dec.setTargetSize((w * f).toInt().coerceAtLeast(1), (h * f).toInt().coerceAtLeast(1))
+            dec.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+    }.getOrNull()
 }
+
+private fun Modifier.photoCloseBg() =
+    this.then(Modifier.background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.55f), androidx.compose.foundation.shape.CircleShape))

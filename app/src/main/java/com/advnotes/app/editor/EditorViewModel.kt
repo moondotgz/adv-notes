@@ -183,6 +183,24 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         scheduleSave(); refreshUndoFlags()
     }
 
+    /** Deletes the pages with these ids, keeping the view on the nearest remaining page. */
+    fun deletePages(ids: Set<String>) {
+        if (ids.isEmpty()) return
+        _ui.update { s ->
+            val nb = s.notebook ?: return@update s
+            val curId = nb.pages.getOrNull(s.pageIndex)?.id
+            val before = nb.pages.take(s.pageIndex).count { it.id in ids }
+            val pages = nb.pages.filter { it.id !in ids }.ifEmpty { listOf(Page()) }
+            val idx = pages.indexOfFirst { it.id == curId }.takeIf { it >= 0 } ?: (s.pageIndex - before)
+            ids.forEach { undo.remove(it); redo.remove(it) }
+            s.copy(
+                notebook = nb.copy(pages = pages, bookmarks = nb.bookmarks.filter { it.pageId !in ids }),
+                pageIndex = idx.coerceIn(0, pages.size - 1),
+            )
+        }
+        scheduleSave(); refreshUndoFlags()
+    }
+
     fun setPaper(style: PaperStyle, wholeNotebook: Boolean) {
         _ui.update { s ->
             val nb = s.notebook ?: return@update s
