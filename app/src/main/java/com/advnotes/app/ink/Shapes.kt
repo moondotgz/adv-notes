@@ -12,7 +12,7 @@ import kotlin.math.sqrt
 
 enum class ShapeKind(val label: String) {
     LINE("Line"), ARROW("Arrow"), RECT("Rectangle"), ELLIPSE("Ellipse"), TRIANGLE("Triangle"),
-    RIGHT_TRIANGLE("Right triangle"), DIAMOND("Diamond"), AXES("Axes"), POLYGON("Polygon"),
+    RIGHT_TRIANGLE("Right triangle"), DIAMOND("Diamond"), AXES("Axes"), LINE_CHART("Line chart"), POLYGON("Polygon"),
 }
 
 /** Builds point lists (x, y pairs) for geometric shapes. Each inner array is one stroke. */
@@ -37,6 +37,16 @@ object ShapeFactory {
             ShapeKind.AXES -> {
                 val cx = (l + r) / 2; val cy = (t + b) / 2
                 arrow(l, cy, r, cy) + arrow(cx, b, cx, t)
+            }
+            ShapeKind.LINE_CHART -> {
+                // First-quadrant axes from the bottom-left corner, with 5 ticks on each axis.
+                val tick = ((min(r - l, b - t)) * 0.04f).coerceIn(4f, 12f)
+                val out = arrow(l, b, r, b) + arrow(l, b, l, t)
+                val ticks = (1..5).flatMap { i ->
+                    val x = l + (r - l) * i / 6f; val y = b - (b - t) * i / 6f
+                    listOf(poly(floatArrayOf(x, b - tick, x, b + tick)), poly(floatArrayOf(l - tick, y, l + tick, y)))
+                }
+                out + ticks
             }
             ShapeKind.POLYGON -> listOf(poly(floatArrayOf(x0, y0, ex, ey)))
         }

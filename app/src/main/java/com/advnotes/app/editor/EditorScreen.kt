@@ -232,6 +232,13 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
         }
     }
 
+    // Keep the screen on while a notebook is open.
+    val hostView = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(hostView) {
+        hostView.keepScreenOn = true
+        onDispose { hostView.keepScreenOn = false }
+    }
+
     val leave = { vm.onLeave(); onBack() }
     BackHandler { leave() }
 
