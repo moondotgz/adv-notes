@@ -489,6 +489,10 @@ class InkCanvasView(context: Context) : View(context) {
         FingerMode.AUTO -> stylusSeen
     }
 
+    /** Hide the system's pen/mouse pointer over the page; the app draws its own size-accurate cursor. */
+    override fun onResolvePointerIcon(event: MotionEvent, pointerIndex: Int): android.view.PointerIcon =
+        android.view.PointerIcon.getSystemIcon(context, android.view.PointerIcon.TYPE_NULL)
+
     override fun onHoverEvent(e: MotionEvent): Boolean {
         if (!isStylus(e.getToolType(0))) return super.onHoverEvent(e)
         when (e.actionMasked) {
