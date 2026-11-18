@@ -766,6 +766,25 @@ private fun ToolButton(icon: ImageVector, label: String, selected: Boolean, onCl
     ) { Icon(icon, label) }
 }
 
+/** Small preview of a shape, drawn with the same geometry the Shapes tool uses. */
+@Composable
+private fun ShapeIcon(kind: ShapeKind) {
+    val color = androidx.compose.material3.LocalContentColor.current
+    androidx.compose.foundation.Canvas(Modifier.size(18.dp)) {
+        val m = 2.dp.toPx(); val e = size.width - m
+        val lines = kind == ShapeKind.LINE || kind == ShapeKind.ARROW
+        val strokes = com.advnotes.app.ink.ShapeFactory.make(kind, m, if (lines) e else m, e, if (lines) m else e)
+        for (xy in strokes) {
+            val p = androidx.compose.ui.graphics.Path()
+            p.moveTo(xy[0], xy[1])
+            var i = 2
+            while (i + 1 < xy.size) { p.lineTo(xy[i], xy[i + 1]); i += 2 }
+            drawPath(p, color, style = androidx.compose.ui.graphics.drawscope.Stroke(1.6.dp.toPx(),
+                cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+        }
+    }
+}
+
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun ToolOptionsPopup(expanded: Boolean, tool: ToolState, onChange: (ToolState) -> Unit, onDismiss: () -> Unit) {
@@ -813,7 +832,7 @@ private fun ToolOptionsPopup(expanded: Boolean, tool: ToolState, onChange: (Tool
                     Text("Shape", style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ShapeKind.entries.filter { it != ShapeKind.POLYGON }.forEach { k ->
-                            FilterChip(k == tool.shape, { onChange(tool.copy(shape = k)) }, label = { Text(k.label) })
+                            FilterChip(k == tool.shape, { onChange(tool.copy(shape = k)) }, label = { Text(k.label) }, leadingIcon = { ShapeIcon(k) })
                         }
                     }
                 }

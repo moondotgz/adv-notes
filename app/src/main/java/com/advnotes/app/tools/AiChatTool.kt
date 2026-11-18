@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -111,6 +112,13 @@ Be concise unless asked for detail. Answer in the language the student writes in
         var job by remember { mutableStateOf<Job?>(null) }
         var error by remember { mutableStateOf<String?>(null) }
         var historyMenu by remember { mutableStateOf(false) }
+        var confirmDelete by remember { mutableStateOf<Chat?>(null) }
+        fun deleteChat(c: Chat) {
+            chats.removeAll { it.id == c.id }
+            host.storage.set("chats", AppJson.encodeToString(chatsSer, chats.toList()))
+            if (current.id == c.id) { job?.cancel(); current = Chat(); error = null }
+            if (chats.isEmpty()) historyMenu = false
+        }
         var photo by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
         val context = LocalContext.current
         var cameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -170,6 +178,15 @@ Be concise unless asked for detail. Answer in the language the student writes in
             if (n > 0) listState.animateScrollToItem(n - 1)
         }
 
+        confirmDelete?.let { c ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { confirmDelete = null },
+                title = { Text("Delete chat?") },
+                text = { Text("“${c.title}” will be deleted.") },
+                confirmButton = { androidx.compose.material3.TextButton(onClick = { deleteChat(c); confirmDelete = null }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
+                dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
+            )
+        }
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -181,10 +198,17 @@ Be concise unless asked for detail. Answer in the language the student writes in
                     IconButton(onClick = { historyMenu = true }, enabled = chats.isNotEmpty()) { Icon(Icons.Default.History, "Past chats") }
                     DropdownMenu(historyMenu, { historyMenu = false }, Modifier.heightIn(max = 400.dp)) {
                         chats.sortedByDescending { it.updated }.forEach { c ->
-                            DropdownMenuItem(text = { Text(c.title, maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = { current = c; historyMenu = false })
+                            DropdownMenuItem(
+                                text = { Text(c.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                onClick = { current = c; historyMenu = false },
+                                trailingIcon = {
+                                    IconButton(onClick = { confirmDelete = c }) { Icon(Icons.Default.Delete, "Delete chat") }
+                                },
+                            )
                         }
                     }
                 }
+                if (current.messages.isNotEmpty()) IconButton(onClick = { confirmDelete = current }) { Icon(Icons.Default.Delete, "Delete this chat") }
                 IconButton(onClick = { job?.cancel(); current = Chat(); error = null }) { Icon(Icons.Default.Add, "New chat") }
             }
             HorizontalDivider()
