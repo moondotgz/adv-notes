@@ -20,6 +20,8 @@
   window.AdvNotes = {
     /** "light" or "dark", following the app theme. */
     theme: N.theme(),
+    /** The app's colours, e.g. colors.primary = "#3557D6" (also set as CSS variables --an-primary, --an-surface, …). */
+    colors: (function () { try { return N.colors ? JSON.parse(N.colors()) : {}; } catch (e) { return {}; } })(),
     /** Name of the notebook the tool is open next to. */
     notebookTitle: N.notebookTitle(),
 
@@ -70,7 +72,10 @@
   };
   // May run at document start, before <html> exists.
   function ready() {
-    document.documentElement.setAttribute('data-theme', window.AdvNotes.theme);
+    var root = document.documentElement;
+    root.setAttribute('data-theme', window.AdvNotes.theme);
+    var c = window.AdvNotes.colors;
+    for (var k in c) root.style.setProperty('--an-' + k, c[k]);
     window.dispatchEvent(new Event('advnotesready'));
   }
   if (document.documentElement) ready();

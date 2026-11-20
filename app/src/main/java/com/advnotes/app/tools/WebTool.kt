@@ -1,5 +1,8 @@
 package com.advnotes.app.tools
 
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.surfaceColorAtElevation
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.net.Uri
@@ -66,6 +69,26 @@ class WebTool(
     @Composable
     override fun Content(host: ToolHost) {
         val dark = isSystemInDarkTheme()
+        // The app's live Material colours (wallpaper-based on Android 12+), handed to tools as CSS variables.
+        val cs = androidx.compose.material3.MaterialTheme.colorScheme
+        val panelBg = cs.surfaceColorAtElevation(2.dp)
+        val colorsJson = remember(cs, panelBg) {
+            fun hex(c: androidx.compose.ui.graphics.Color) = "#%06X".format(c.toArgb() and 0xFFFFFF)
+            buildJsonObject {
+                put("background", hex(panelBg))
+                listOf(
+                    "primary" to cs.primary, "onPrimary" to cs.onPrimary,
+                    "primaryContainer" to cs.primaryContainer, "onPrimaryContainer" to cs.onPrimaryContainer,
+                    "secondaryContainer" to cs.secondaryContainer, "onSecondaryContainer" to cs.onSecondaryContainer,
+                    "tertiary" to cs.tertiary, "tertiaryContainer" to cs.tertiaryContainer,
+                    "surface" to cs.surface, "onSurface" to cs.onSurface, "onSurfaceVariant" to cs.onSurfaceVariant,
+                    "surfaceContainerLow" to cs.surfaceContainerLow, "surfaceContainer" to cs.surfaceContainer,
+                    "surfaceContainerHigh" to cs.surfaceContainerHigh, "surfaceContainerHighest" to cs.surfaceContainerHighest,
+                    "outline" to cs.outline, "outlineVariant" to cs.outlineVariant,
+                    "error" to cs.error, "onError" to cs.onError, "errorContainer" to cs.errorContainer,
+                ).forEach { (k, c) -> put(k, hex(c)) }
+            }.toString()
+        }
         val scope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main) }
         DisposableEffect(Unit) { onDispose { scope.cancel() } }
         AndroidView(
@@ -125,7 +148,8 @@ class WebTool(
                             return true
                         }
                     }
-                    val bridge = Bridge(this, host, scope, if (dark) "dark" else "light")
+                    setBackgroundColor(panelBg.toArgb())   // no white flash before the page paints
+                    val bridge = Bridge(this, host, scope, if (dark) "dark" else "light", colorsJson)
                     addJavascriptInterface(bridge, "AdvNotesNative")
                     val shim = runCatching { ctx.assets.open("tools/lib/advnotes.js").bufferedReader().readText() }.getOrDefault("")
                     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -144,6 +168,7 @@ class WebTool(
         private val host: ToolHost,
         private val scope: CoroutineScope,
         private val theme: String,
+        private val colorsJson: String,
     ) {
         private val main = Handler(Looper.getMainLooper())
 
@@ -172,6 +197,8 @@ class WebTool(
         private fun quote(s: String) = JsonPrimitive(s).toString()
 
         @JavascriptInterface fun theme() = theme
+        /** The app's colour scheme as JSON: {"primary":"#RRGGBB", ...}. */
+        @JavascriptInterface fun colors() = colorsJson
         @JavascriptInterface fun notebookTitle() = host.notebookTitle
         @JavascriptInterface fun insertText(text: String) { main.post { host.insertText(text) } }
         @JavascriptInterface fun toast(msg: String) { main.post { host.toast(msg) } }
