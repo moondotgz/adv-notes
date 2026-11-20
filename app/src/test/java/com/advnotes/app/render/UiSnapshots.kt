@@ -67,9 +67,13 @@ class UiSnapshots {
             for (v in roots) {
                 if (v.width == 0 || v.height == 0) continue
                 c.save()
-                if (v !== main) {
+                val plp = v.layoutParams as? android.view.WindowManager.LayoutParams
+                if (v !== main && plp != null && plp.type in 1000..1999) {
+                    // pop-up menus (sub-windows) sit where the window manager placed them, without dimming
+                    c.translate(plp.x.toFloat(), plp.y.toFloat())
+                } else if (v !== main) {
                     c.drawColor(0x55000000)
-                    val lp = v.layoutParams as? android.view.WindowManager.LayoutParams
+                    val lp = plp
                     val bottom = lp != null && (lp.gravity and android.view.Gravity.BOTTOM) == android.view.Gravity.BOTTOM
                     c.translate((w - v.width) / 2f, if (bottom) (h - v.height).toFloat() else (h - v.height) / 2f)
                 }
@@ -248,6 +252,68 @@ class UiSnapshots {
         rule.waitForIdle()
         assertEquals("BOTTOM", app.settings.state.value.toolbarDock)
         snap("19_toolbar_bottom")
+    }
+
+    /** A sketch to place on the page as a picture: axes and a curve, like a pasted graph. */
+    private fun sampleImage(): Bitmap {
+        val b = Bitmap.createBitmap(600, 400, Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(b)
+        c.drawColor(0xFFFFFFFF.toInt())
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 5f; style = android.graphics.Paint.Style.STROKE; color = 0xFF1A1A1A.toInt() }
+        c.drawLine(40f, 360f, 580f, 360f, p); c.drawLine(40f, 360f, 40f, 20f, p)
+        p.color = 0xFF2D4BD8.toInt()
+        val path = android.graphics.Path(); path.moveTo(40f, 340f)
+        for (x in 0..540 step 6) path.lineTo(40f + x, 340f - 300f * (1 - kotlin.math.exp(-x / 120f)))
+        c.drawPath(path, p)
+        return b
+    }
+
+    /** The newer editor features on a landscape tablet: two pages, a picture, pop-out tool options, page list, paper scope. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w1280dp-h800dp-land-xhdpi")
+    fun tabletFeatures() {
+        val app = AdvNotesApp.instance
+        val nbId = com.advnotes.app.model.newId()
+        val asset = "img-sample.png"
+        app.repo.assetFile(nbId, asset).apply { parentFile?.mkdirs() }.outputStream().use { sampleImage().compress(Bitmap.CompressFormat.PNG, 100, it) }
+        runBlocking {
+            app.settings.update { it.copy(pageNav = "TWO_PAGE") }
+            val first = com.advnotes.app.model.Page(images = listOf(com.advnotes.app.model.ImageBox(asset = asset, x = 520f, y = 760f, w = 390f, h = 260f)))
+            app.repo.save(Notebook(id = nbId, title = "Chemistry", paper = PaperStyle.NARROW_GRID, cover = 0xFF0F8B6F.toInt(),
+                pages = listOf(first, com.advnotes.app.model.Page(paper = PaperStyle.GRID), com.advnotes.app.model.Page())))
+            app.repo.save(Notebook(title = "Calculus II", paper = PaperStyle.NARROW_GRID, cover = 0xFF2D4BD8.toInt()))
+            app.repo.save(Notebook(title = "Physics lab", paper = PaperStyle.OXFORD, cover = 0xFF9C36B5.toInt()))
+        }
+        rule.waitForIdle()
+        snap("20_library_tablet")
+
+        rule.onNodeWithText("Chemistry").performClick()
+        rule.waitForIdle()
+        val canvas = findCanvas(rule.activity.window.decorView)!!
+        pen(canvas, wave(60f, 200f, 420f, 22f, 16f), { 0.2f + 0.8f * sin(it * 3.14f) })
+        pen(canvas, wave(60f, 300f, 360f, 18f, 20f), { 0.6f })
+        pen(canvas, loop(220f, 520f, 120f, 80f, wobble = 5f), { 0.7f }, holdAtEnd = true)
+        snap("21_two_pages_with_picture")
+
+        rule.onNodeWithContentDescriptionCompat("Pen")          // already selected: opens its options next to the icon
+        snap("22_pen_options_popout")
+
+        rule.onNodeWithContentDescriptionCompat("Shapes")
+        rule.onNodeWithContentDescriptionCompat("Shapes")
+        snap("23_shape_options")
+
+        rule.onNodeWithContentDescriptionCompat("Pen")
+        rule.onNodeWithContentDescriptionCompat("Page list")
+        snap("24_page_list")
+        rule.onNodeWithContentDescriptionCompat("Close pages")
+
+        rule.onNodeWithContentDescriptionCompat("More")
+        click("Paper style…")
+        snap("25_paper_style")
+        click("Cancel")
+
+        rule.onNodeWithContentDescriptionCompat("Hide top bar")
+        snap("26_top_bar_hidden")
     }
 
     /** Regression: SHIFT legends pushed key labels out of the keys with big fonts. */
