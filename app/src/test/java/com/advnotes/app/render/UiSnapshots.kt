@@ -268,6 +268,11 @@ class UiSnapshots {
         return b
     }
 
+    /** Pictures load on a background thread; give it time and let the redraw callback run. */
+    private fun waitForPictures() {
+        repeat(4) { Thread.sleep(400); ShadowLooper.idleMainLooper(100, TimeUnit.MILLISECONDS); rule.waitForIdle() }
+    }
+
     /** The newer editor features on a landscape tablet: two pages, a picture, pop-out tool options, page list, paper scope. */
     @Test
     @Config(sdk = [34], qualifiers = "w1280dp-h800dp-land-xhdpi")
@@ -285,7 +290,13 @@ class UiSnapshots {
             app.repo.save(Notebook(title = "Physics lab", paper = PaperStyle.OXFORD, cover = 0xFF9C36B5.toInt()))
         }
         rule.waitForIdle()
-        snap("20_library_tablet")
+        // warm the picture cache so the first editor frame already shows the picture
+        val bg = com.advnotes.app.model.PageBackground(asset)
+        for (i in 0 until 40) {
+            if (com.advnotes.app.ink.Backgrounds.get(nbId, bg) {} != null) break
+            Thread.sleep(100); ShadowLooper.idleMainLooper(50, TimeUnit.MILLISECONDS)
+        }
+        snap("30_library_tablet")
 
         rule.onNodeWithText("Chemistry").performClick()
         rule.waitForIdle()
@@ -293,27 +304,27 @@ class UiSnapshots {
         pen(canvas, wave(60f, 200f, 420f, 22f, 16f), { 0.2f + 0.8f * sin(it * 3.14f) })
         pen(canvas, wave(60f, 300f, 360f, 18f, 20f), { 0.6f })
         pen(canvas, loop(220f, 520f, 120f, 80f, wobble = 5f), { 0.7f }, holdAtEnd = true)
-        snap("21_two_pages_with_picture")
+        waitForPictures(); snap("31_two_pages_with_picture")
 
         rule.onNodeWithContentDescriptionCompat("Pen")          // already selected: opens its options next to the icon
-        snap("22_pen_options_popout")
+        snap("32_pen_options_popout")
 
         rule.onNodeWithContentDescriptionCompat("Shapes")
         rule.onNodeWithContentDescriptionCompat("Shapes")
-        snap("23_shape_options")
+        snap("33_shape_options")
 
         rule.onNodeWithContentDescriptionCompat("Pen")
         rule.onNodeWithContentDescriptionCompat("Page list")
-        snap("24_page_list")
+        waitForPictures(); snap("34_page_list")
         rule.onNodeWithContentDescriptionCompat("Close pages")
 
         rule.onNodeWithContentDescriptionCompat("More")
         click("Paper style…")
-        snap("25_paper_style")
+        snap("35_paper_style")
         click("Cancel")
 
         rule.onNodeWithContentDescriptionCompat("Hide top bar")
-        snap("26_top_bar_hidden")
+        snap("36_top_bar_hidden")
     }
 
     /** Regression: SHIFT legends pushed key labels out of the keys with big fonts. */

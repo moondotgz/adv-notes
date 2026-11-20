@@ -8,6 +8,17 @@ A notebook-style handwriting app for Android, built for the S Pen. It has an AI 
 <img src="docs/screenshots/05_ai_sheet.png" width="240">
 </p>
 
+On a tablet: two pages side by side with a picture placed on the page, tool options that pop out from the toolbar, and the page list.
+
+<p>
+<img src="docs/screenshots/31_two_pages_with_picture.png" width="420">
+<img src="docs/screenshots/32_pen_options_popout.png" width="420">
+</p>
+<p>
+<img src="docs/screenshots/33_shape_options.png" width="420">
+<img src="docs/screenshots/34_page_list.png" width="420">
+</p>
+
 ## Features
 
 **Writing**
