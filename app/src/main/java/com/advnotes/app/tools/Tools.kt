@@ -40,6 +40,9 @@ interface ToolHost {
     /** Writes [text] onto the current page (below the selection, or in the visible area). */
     fun insertText(text: String)
 
+    /** Places [image] on the current page as a movable picture, centred in the visible area. */
+    fun insertImage(image: Bitmap) {}
+
     /** The current lasso selection rendered to an image, or null if nothing is selected. */
     fun selectionImage(): Bitmap?
 

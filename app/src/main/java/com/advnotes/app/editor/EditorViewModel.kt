@@ -243,13 +243,17 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
      * Places a picture on the current page, centred in [view] (the visible part of the page, in page
      * units) and at most 60% of its width. [onPlaced] gets the new element's id so the canvas can select it.
      */
-    fun insertImage(uri: android.net.Uri, view: android.graphics.RectF, onPlaced: (String?) -> Unit) {
+    fun insertImage(uri: android.net.Uri, view: android.graphics.RectF, onPlaced: (String?) -> Unit) =
+        insertImage(view, onPlaced) { decodeUpright(uri, 2000) }
+
+    /** Places a picture produced by [source] (run off the main thread), e.g. a chart drawn by a tool. */
+    fun insertImage(view: android.graphics.RectF, onPlaced: (String?) -> Unit, source: () -> Bitmap?) {
         val nb = _ui.value.notebook ?: return
         val pageId = currentPage?.id ?: return
         viewModelScope.launch {
             val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
-                    val bmp = decodeUpright(uri, 2000) ?: return@runCatching null
+                    val bmp = source() ?: return@runCatching null
                     val png = bmp.hasAlpha()
                     val name = "img-" + com.advnotes.app.model.newId() + if (png) ".png" else ".jpg"
                     val f = a.repo.assetFile(nb.id, name).apply { parentFile?.mkdirs() }

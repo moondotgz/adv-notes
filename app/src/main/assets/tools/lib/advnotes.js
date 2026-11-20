@@ -25,6 +25,8 @@
 
     /** Write text onto the current notebook page. */
     insertText: function (text) { N.insertText(String(text)); },
+    /** Place an image (PNG/JPEG data URL, e.g. canvas.toDataURL()) on the page as a movable picture. */
+    insertImage: N.insertImage ? function (dataUrl) { return N.insertImage(String(dataUrl)); } : undefined,
     /** Show a short Android toast. */
     toast: function (msg) { N.toast(String(msg)); },
     /** PNG data URL of the current lasso selection, or null. */

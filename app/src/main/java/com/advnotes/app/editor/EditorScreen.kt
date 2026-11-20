@@ -192,6 +192,10 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                     else { val r = v.visiblePageRect(); vm.insertTextAt(text, r.left + 30f, r.top + 40f) }
                     Toast.makeText(ctx, "Added to page", Toast.LENGTH_SHORT).show()
                 }
+                override fun insertImage(image: android.graphics.Bitmap) {
+                    val v = canvas ?: return
+                    vm.insertImage(v.visiblePageRect(), { id -> if (id != null) canvas?.pendingSelectImage = id }) { image }
+                }
                 override fun selectionImage() = canvas?.selectionBitmap()
                 override fun pageImage() = canvas?.let { it.regionBitmap(it.visiblePageRect()) }
                 override fun ai() = com.advnotes.app.ai.AiClients.forProvider(app.settings.state.value.provider, app.settings, app.chatGpt, app.local)

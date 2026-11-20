@@ -45,6 +45,7 @@ The page is served from `https://appassets.androidplatform.net/…` inside an An
 | Call | What it does |
 |---|---|
 | `AdvNotes.insertText(text)` | Writes text onto the current page (below the lasso selection, or in the visible area). |
+| `AdvNotes.insertImage(dataUrl)` | Places a PNG/JPEG data URL (e.g. `canvas.toDataURL()`) on the page as a movable picture. App 1.5.0+; check `if (AdvNotes.insertImage)` first. |
 | `AdvNotes.selectionImage()` | PNG data URL of the current lasso selection, or `null`. |
 | `AdvNotes.pageImage()` | PNG data URL of the visible part of the page. |
 | `await AdvNotes.ask(prompt, opts)` | Asks the AI provider the user configured. `opts`: `system`, `history: [{role: "user"\|"assistant", text}]`, `image: "selection"\|"page"\|dataURL`, `onText(partial)` for streaming. Resolves with the answer text. |

@@ -175,6 +175,13 @@ class WebTool(
         @JavascriptInterface fun notebookTitle() = host.notebookTitle
         @JavascriptInterface fun insertText(text: String) { main.post { host.insertText(text) } }
         @JavascriptInterface fun toast(msg: String) { main.post { host.toast(msg) } }
+        /** Places a PNG/JPEG data URL on the page as a picture. Returns false if it couldn't be decoded. */
+        @JavascriptInterface fun insertImage(dataUrl: String): Boolean {
+            val bytes = decodeDataUrl(dataUrl) ?: return false
+            val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return false
+            main.post { host.insertImage(bmp) }
+            return true
+        }
         @JavascriptInterface fun storageGet(key: String): String? = host.storage.get(key)
         @JavascriptInterface fun storageSet(key: String, value: String?) = host.storage.set(key, value)
         @JavascriptInterface fun selectionImage(): String? = onMain { dataUrl(host.selectionImage()) }
