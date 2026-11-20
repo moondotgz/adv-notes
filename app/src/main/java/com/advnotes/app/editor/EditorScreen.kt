@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.key
 import androidx.compose.material.icons.filled.Draw
@@ -387,7 +388,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                 for (slot in 0 until step) {
                     val idx = spreadStart + slot
                     val slotPage = nb?.pages?.getOrNull(idx)
-                    BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                    BoxWithConstraints(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
                     val boxW = constraints.maxWidth
                     if (slot > 0 && slotPage == null) {
                         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer), contentAlignment = Alignment.Center) {
