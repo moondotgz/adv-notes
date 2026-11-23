@@ -7,6 +7,36 @@
   if (window.AdvNotes || !window.AdvNotesNative) return;
   var N = window.AdvNotesNative;
   var pending = {};
+  // Translations of this tool for the app language: { "English text": "translation", "_meta": {...} }
+  var STR = {};
+  try { STR = N.strings ? JSON.parse(N.strings()) || {} : {}; } catch (e) { STR = {}; }
+  function t(key) {
+    var s = (typeof STR[key] === 'string' && STR[key]) ? STR[key] : String(key);
+    for (var i = 1; i < arguments.length; i++) s = s.split('{' + (i - 1) + '}').join(String(arguments[i]));
+    return s;
+  }
+  // Translates text nodes and placeholder/title/aria-label attributes whose whole text is a key.
+  // Mixed text (numbers, names…) is translated by the tool itself with AdvNotes.t().
+  var ATTRS = ['placeholder', 'title', 'aria-label'];
+  function norm(x) { return String(x).replace(/\s+/g, ' ').trim(); }
+  function translateNode(root) {
+    if (!root || root.nodeType === 8) return;
+    if (root.nodeType === 3) {
+      var raw = root.nodeValue, k = norm(raw);
+      if (k && typeof STR[k] === 'string' && STR[k] && k !== STR[k]) {
+        var lead = raw.match(/^\s*/)[0], trail = raw.match(/\s*$/)[0];
+        root.nodeValue = lead + STR[k] + trail;
+      }
+      return;
+    }
+    if (root.nodeType !== 1 || /^(SCRIPT|STYLE|TEXTAREA)$/.test(root.tagName) || root.getAttribute('translate') === 'no') return;
+    for (var a = 0; a < ATTRS.length; a++) {
+      var v = root.getAttribute(ATTRS[a]), vk = v && norm(v);
+      if (vk && typeof STR[vk] === 'string' && STR[vk] && STR[vk] !== vk) root.setAttribute(ATTRS[a], STR[vk]);
+    }
+    for (var c = root.firstChild; c; c = c.nextSibling) translateNode(c);
+  }
+  function hasStrings() { for (var k in STR) if (k !== '_meta') return true; return false; }
   var seq = 0;
 
   function call(method, args, onProgress) {
@@ -20,6 +50,14 @@
   window.AdvNotes = {
     /** "light" or "dark", following the app theme. */
     theme: N.theme(),
+    /** App language tag, e.g. "en" or "pt-BR", and its name ("Português (Brasil)"). */
+    lang: N.language ? N.language() : 'en',
+    languageName: N.languageName ? N.languageName() : 'English',
+    /**
+     * Translates English UI text with this tool's i18n/<lang>.json; falls back to English.
+     * t("Delete {0}?", name). Static HTML text is translated automatically.
+     */
+    t: t,
     /** The app's colours, e.g. colors.primary = "#3557D6" (also set as CSS variables --an-primary, --an-surface, …). */
     colors: (function () { try { return N.colors ? JSON.parse(N.colors()) : {}; } catch (e) { return {}; } })(),
     /** Name of the notebook the tool is open next to. */
@@ -76,6 +114,21 @@
     root.setAttribute('data-theme', window.AdvNotes.theme);
     var c = window.AdvNotes.colors;
     for (var k in c) root.style.setProperty('--an-' + k, c[k]);
+    if (hasStrings()) {
+      document.documentElement.setAttribute('lang', window.AdvNotes.lang);
+      var go = function () {
+        translateNode(document.body);
+        new MutationObserver(function (muts) {
+          for (var i = 0; i < muts.length; i++) {
+            var m = muts[i];
+            if (m.type === 'characterData') translateNode(m.target);
+            else if (m.type === 'attributes') translateNode(m.target);
+            else for (var j = 0; j < m.addedNodes.length; j++) translateNode(m.addedNodes[j]);
+          }
+        }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+      };
+      if (document.body) go(); else document.addEventListener('DOMContentLoaded', go);
+    }
     window.dispatchEvent(new Event('advnotesready'));
   }
   if (document.documentElement) ready();

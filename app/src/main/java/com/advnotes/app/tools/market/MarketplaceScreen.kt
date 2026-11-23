@@ -120,7 +120,7 @@ fun MarketplaceScreen(onBack: () -> Unit, onOpen: ((String) -> Unit)? = null) {
                     val categories = l.index.tools.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
                     val shown = l.index.tools.filter { e ->
                         (category == null || e.category == category) &&
-                            (query.isBlank() || listOf(e.name, e.description, e.author, e.category).any { it.contains(query.trim(), ignoreCase = true) })
+                            (query.isBlank() || listOf(e.name, e.description, e.localName, e.localDescription, e.author, e.category).any { it.contains(query.trim(), ignoreCase = true) })
                     }
                     LazyColumn(
                         Modifier.fillMaxSize().widthIn(max = 760.dp),
@@ -198,14 +198,14 @@ private fun ToolCard(
                 }
                 Spacer(Modifier.size(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(e.name, style = MaterialTheme.typography.titleMedium)
+                    Text(e.localName, style = MaterialTheme.typography.titleMedium)
                     Text(
                         listOfNotNull(e.author.ifBlank { null }, "v${e.version}", Marketplace.sizeLabel(e.size), e.category.ifBlank { null }).joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            if (e.description.isNotBlank()) Text(e.description, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 10.dp))
+            if (e.localDescription.isNotBlank()) Text(e.localDescription, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 10.dp))
             if (progress != null) {
                 LinearProgressIndicator({ progress }, Modifier.fillMaxWidth().padding(top = 12.dp))
             } else {

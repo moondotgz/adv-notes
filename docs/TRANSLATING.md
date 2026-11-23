@@ -34,4 +34,5 @@ Edit the values in its JSON file. Once a fluent speaker has reviewed a machine t
 - Enums with a display label take it as `private val en: String` and expose `val label get() = tr(en)`.
 - After adding or changing strings, run `python3 scripts/i18n.py`. It regenerates `en.json` and adds the new keys
   (empty) to every translation. CI runs `--check` and fails if `en.json` is stale.
-- Web tools (the tool store) are separate pages and are not covered by these files yet.
+- Tools in the tool store have their own files: `tools/<id>/i18n/<tag>.json` in the adv-notes-tools repository
+  (same format; see its README). The app passes the matching file to each tool.

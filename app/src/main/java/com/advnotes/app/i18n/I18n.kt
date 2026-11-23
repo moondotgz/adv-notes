@@ -66,6 +66,12 @@ object I18n {
             ?: available.firstOrNull { it.tag.substringBefore('-').equals(loc.language, true) }
     }
 
+    /** Tag of the language in effect ("en" when none). Tools use it to pick their own translation file. */
+    fun tag(): String = active()?.tag ?: "en"
+
+    /** Name of the language in effect, in that language (e.g. "Português (Brasil)"). */
+    fun name(): String = active()?.name ?: "English"
+
     private fun load() {
         val lang = active()
         table = if (lang == null || lang.tag == "en") emptyMap()

@@ -62,8 +62,28 @@ class WebTool(
     val installed: Boolean,
 ) : NotebookTool {
     override val id get() = manifest.id
-    override val name get() = manifest.name
-    override val description get() = manifest.description
+    override val name get() = meta("name") ?: manifest.name
+    override val description get() = meta("description") ?: manifest.description
+
+    // ---- translations: <tool>/i18n/<tag>.json, keyed by the English text (see docs/TOOLS.md) ----
+    private val stringsCache = HashMap<String, String?>()
+
+    /** The tool's translation file for [tag] (or for its base language), as JSON text; null when there is none. */
+    fun stringsJson(tag: String): String? = stringsCache.getOrPut(tag) {
+        if (tag == "en") null else readToolFile("i18n/$tag.json") ?: readToolFile("i18n/${tag.substringBefore('-')}.json")
+    }
+
+    private fun meta(key: String): String? = runCatching {
+        val s = stringsJson(com.advnotes.app.i18n.I18n.tag()) ?: return null
+        val m = com.advnotes.app.ai.Http.json.parseToJsonElement(s).jsonObject["_meta"]?.jsonObject ?: return null
+        (m[key] as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+    }.getOrNull()
+
+    private fun readToolFile(rel: String): String? = runCatching {
+        val ctx = com.advnotes.app.AdvNotesApp.instance
+        if (basePath.startsWith("/installed/")) File(ctx.filesDir, "tools/" + basePath.removePrefix("/installed/") + rel).takeIf { it.isFile }?.readText()
+        else ctx.assets.open(basePath.removePrefix("/assets/") + rel).bufferedReader().use { it.readText() }
+    }.getOrNull()
 
     @SuppressLint("SetJavaScriptEnabled")
     @Composable
@@ -91,6 +111,7 @@ class WebTool(
         }
         val scope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main) }
         DisposableEffect(Unit) { onDispose { scope.cancel() } }
+        androidx.compose.runtime.key(com.advnotes.app.i18n.I18n.tag()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
@@ -149,7 +170,9 @@ class WebTool(
                         }
                     }
                     setBackgroundColor(panelBg.toArgb())   // no white flash before the page paints
-                    val bridge = Bridge(this, host, scope, if (dark) "dark" else "light", colorsJson)
+                    val lang = com.advnotes.app.i18n.I18n.tag()
+                    val bridge = Bridge(this, host, scope, if (dark) "dark" else "light", colorsJson,
+                        lang, com.advnotes.app.i18n.I18n.name(), stringsJson(lang) ?: "{}")
                     addJavascriptInterface(bridge, "AdvNotesNative")
                     val shim = runCatching { ctx.assets.open("tools/lib/advnotes.js").bufferedReader().readText() }.getOrDefault("")
                     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -160,6 +183,7 @@ class WebTool(
                 }
             },
         )
+        }
     }
 
     /** Methods callable from JavaScript as AdvNotesNative.*. They run on a WebView binder thread. */
@@ -169,6 +193,9 @@ class WebTool(
         private val scope: CoroutineScope,
         private val theme: String,
         private val colorsJson: String,
+        private val lang: String,
+        private val langName: String,
+        private val stringsJsonText: String,
     ) {
         private val main = Handler(Looper.getMainLooper())
 
@@ -199,6 +226,10 @@ class WebTool(
         @JavascriptInterface fun theme() = theme
         /** The app's colour scheme as JSON: {"primary":"#RRGGBB", ...}. */
         @JavascriptInterface fun colors() = colorsJson
+        /** App language tag ("en", "pt-BR"…), its display name, and this tool's translations for it (JSON). */
+        @JavascriptInterface fun language() = lang
+        @JavascriptInterface fun languageName() = langName
+        @JavascriptInterface fun strings() = stringsJsonText
         @JavascriptInterface fun notebookTitle() = host.notebookTitle
         @JavascriptInterface fun insertText(text: String) { main.post { host.insertText(text) } }
         @JavascriptInterface fun toast(msg: String) { main.post { host.toast(msg) } }

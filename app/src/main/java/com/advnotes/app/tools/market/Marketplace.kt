@@ -41,7 +41,17 @@ object Marketplace {
         val files: List<FileEntry>,
         /** Lowest app version the tool works with, e.g. "1.0.0". */
         val minApp: String = "",
+        /** Translated name/description per language tag: {"pt-BR": {"name": "…", "description": "…"}}. */
+        val i18n: Map<String, Map<String, String>> = emptyMap(),
     ) {
+        private fun local(key: String): String? {
+            val tag = com.advnotes.app.i18n.I18n.tag()
+            return (i18n[tag] ?: i18n[tag.substringBefore('-')])?.get(key)?.takeIf { it.isNotBlank() }
+        }
+        /** Name and description in the app language, falling back to English. */
+        val localName: String get() = local("name") ?: name
+        val localDescription: String get() = local("description") ?: description
+
         val size: Long get() = files.sumOf { it.size }
     }
 
