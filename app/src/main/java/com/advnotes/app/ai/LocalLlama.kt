@@ -1,5 +1,7 @@
 package com.advnotes.app.ai
 
+import com.advnotes.app.i18n.tr
+
 import android.content.Context
 import android.net.Uri
 import com.advnotes.app.BuildConfig
@@ -77,8 +79,8 @@ class LocalLlama(private val context: Context, private val settings: SettingsSto
             if (!token.isNullOrBlank()) header("Authorization", "Bearer $token")
         }.build()
         Http.client.newCall(req).await().use { r ->
-            if (r.code == 401 || r.code == 403) throw AiException("This model is gated: accept its licence on huggingface.co and add your Hugging Face token.")
-            if (!r.isSuccessful) throw AiException("Download failed: HTTP ${r.code}")
+            if (r.code == 401 || r.code == 403) throw AiException(tr("This model is gated: accept its licence on huggingface.co and add your Hugging Face token."))
+            if (!r.isSuccessful) throw AiException(tr("Download failed: HTTP {0}", r.code))
             val append = r.code == 206
             val total = (r.body!!.contentLength().takeIf { it > 0 } ?: -1L) + (if (append) have else 0L)
             var done = if (append) have else 0L
@@ -125,10 +127,10 @@ class LocalLlama(private val context: Context, private val settings: SettingsSto
     suspend fun unload() = lock.withLock { unloadLocked() }
 
     override suspend fun complete(req: VisionRequest, onText: (String) -> Unit): String {
-        if (!LlamaBridge.available) throw AiException("This build doesn't include the on-device runner.")
-        val name = settings.state.value.localModel ?: throw AiException("Pick a local model in Settings.")
+        if (!LlamaBridge.available) throw AiException(tr("This build doesn't include the on-device runner."))
+        val name = settings.state.value.localModel ?: throw AiException(tr("Pick a local model in Settings."))
         val m = models().firstOrNull { it.name == name && it.ready }
-            ?: throw AiException("Local model \"$name\" isn't fully downloaded.")
+            ?: throw AiException(tr("Local model \"{0}\" isn't fully downloaded.", name))
         return lock.withLock {
             withContext(Dispatchers.Default) {
                 if (loadedName != m.name) {
@@ -172,7 +174,7 @@ class LocalLlama(private val context: Context, private val settings: SettingsSto
         val secs = (System.nanoTime() - t0) / 1e9
         if (handle == 0L) {
             LlamaLog.event("FAILED to load ${m.name} after %.1f s (see the lines above; usually out of memory or an unsupported file)".format(secs))
-            throw AiException("Couldn't load the model (out of memory or unsupported file). Check Settings → View logs.")
+            throw AiException(tr("Couldn't load the model (out of memory or unsupported file). Check Settings → View logs."))
         }
         loadedName = m.name
         LlamaLog.event("loaded ${m.name} OK in %.1f s".format(secs))

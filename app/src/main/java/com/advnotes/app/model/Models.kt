@@ -1,5 +1,7 @@
 package com.advnotes.app.model
 
+import com.advnotes.app.i18n.tr
+
 import kotlinx.serialization.Serializable
 import java.util.UUID
 
@@ -13,7 +15,7 @@ const val MM = PAGE_WIDTH / 210f
 fun newId(): String = UUID.randomUUID().toString()
 
 @Serializable
-enum class PaperStyle(val label: String) {
+enum class PaperStyle(private val en: String) {
     PLAIN("Plain"),
     NARROW_GRID("Narrow grid"),
     GRID("Grid"),
@@ -23,15 +25,21 @@ enum class PaperStyle(val label: String) {
     WIDE_RULED("Wide ruled"),
     CORNELL("Cornell"),
     ISOMETRIC("Isometric"),
+;
+    /** Shown to the user, in the app language. */
+    val label: String get() = tr(en)
 }
 
 @Serializable
-enum class PaperColor(val label: String, val argb: Int, val dark: Boolean = false) {
+enum class PaperColor(private val en: String, val argb: Int, val dark: Boolean = false) {
     WHITE("White", 0xFFFFFFFF.toInt()),
     CREAM("Cream", 0xFFFBF6E9.toInt()),
     MINT("Mint", 0xFFF0F7F1.toInt()),
     PINK("Pink", 0xFFFCE8EF.toInt()),
     SLATE("Dark", 0xFF22252B.toInt(), dark = true),
+;
+    /** Shown to the user, in the app language. */
+    val label: String get() = tr(en)
 }
 
 @Serializable

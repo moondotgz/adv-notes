@@ -1,5 +1,7 @@
 package com.advnotes.app.ai
 
+import com.advnotes.app.i18n.tr
+
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
@@ -99,7 +101,7 @@ class ChatGptAuth(private val settings: SettingsStore) {
 
     private suspend fun waitForCode(socket: ServerSocket, expectedState: String): String = withContext(Dispatchers.IO) {
         while (true) {
-            val client = try { socket.accept() } catch (e: SocketException) { throw AiException("Sign-in cancelled") }
+            val client = try { socket.accept() } catch (e: SocketException) { throw AiException(tr("Sign-in cancelled")) }
             client.use { c ->
                 val reqLine = c.getInputStream().bufferedReader().readLine().orEmpty()
                 val path = reqLine.split(" ").getOrNull(1).orEmpty()
@@ -123,10 +125,10 @@ class ChatGptAuth(private val settings: SettingsStore) {
 
     /** Fallback: the user pastes the localhost URL their browser ended up on. */
     suspend fun completeFromUrl(pasted: String) {
-        val v = verifier ?: throw AiException("Start the sign-in first.")
+        val v = verifier ?: throw AiException(tr("Start the sign-in first."))
         val q = parseQuery(pasted.substringAfter('?', ""))
-        val code = q["code"] ?: throw AiException("That URL has no ?code= parameter.")
-        if (q["state"] != null && q["state"] != state) throw AiException("State mismatch — start the sign-in again.")
+        val code = q["code"] ?: throw AiException(tr("That URL has no ?code= parameter."))
+        if (q["state"] != null && q["state"] != state) throw AiException(tr("State mismatch — start the sign-in again."))
         cancel()
         exchange(code, v)
     }

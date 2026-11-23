@@ -1,5 +1,7 @@
 package com.advnotes.app.ui
 
+import com.advnotes.app.i18n.tr
+
 import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -46,7 +48,7 @@ fun rememberDriveAuthLauncher(onResult: (Boolean) -> Unit): () -> Unit {
                 if (r.hasResolution() && pi != null) launcher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
                 else granted(r)
             } catch (e: Exception) {
-                Toast.makeText(ctx, "Google sign-in failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(ctx, tr("Google sign-in failed: {0}", e.message), Toast.LENGTH_LONG).show()
                 onResult(false)
             }
         }

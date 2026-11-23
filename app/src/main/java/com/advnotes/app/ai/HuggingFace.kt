@@ -1,5 +1,7 @@
 package com.advnotes.app.ai
 
+import com.advnotes.app.i18n.tr
+
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -51,7 +53,7 @@ object HuggingFace {
             }.build().toString()
         val body = Http.client.newCall(request(url, token)).await().use { r ->
             val b = r.body?.string().orEmpty()
-            if (!r.isSuccessful) throw AiException("Hugging Face: " + errorMessage(r.code, b))
+            if (!r.isSuccessful) throw AiException(tr("Hugging Face: ") + errorMessage(r.code, b))
             b
         }
         return Http.json.parseToJsonElement(body).jsonArray.mapNotNull { e ->
@@ -71,8 +73,8 @@ object HuggingFace {
     suspend fun files(repo: String, token: String? = null): RepoFiles {
         val body = Http.client.newCall(request("$API/$repo/tree/main?recursive=true", token)).await().use { r ->
             val b = r.body?.string().orEmpty()
-            if (r.code == 401 || r.code == 403) throw AiException("This model is gated: accept its licence on huggingface.co and add your Hugging Face token below.")
-            if (!r.isSuccessful) throw AiException("Hugging Face: " + errorMessage(r.code, b))
+            if (r.code == 401 || r.code == 403) throw AiException(tr("This model is gated: accept its licence on huggingface.co and add your Hugging Face token below."))
+            if (!r.isSuccessful) throw AiException(tr("Hugging Face: ") + errorMessage(r.code, b))
             b
         }
         val all = Http.json.parseToJsonElement(body).jsonArray.mapNotNull { e ->

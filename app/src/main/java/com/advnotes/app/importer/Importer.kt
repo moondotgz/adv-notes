@@ -1,5 +1,7 @@
 package com.advnotes.app.importer
 
+import com.advnotes.app.i18n.tr
+
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -22,8 +24,11 @@ import java.util.zip.ZipFile
 class ImportException(message: String) : Exception(message)
 
 /** What a file turned out to be. */
-enum class ImportFormat(val label: String) {
+enum class ImportFormat(private val en: String) {
     PDF("PDF"), IMAGE("Image"), SAMSUNG_NOTES("Samsung Notes"), XOURNAL("Xournal++"),
+;
+    /** Shown to the user, in the app language. */
+    val label: String get() = tr(en)
 }
 
 /** How an imported PDF behaves: the Adv Notes paper for pages added later, and whether pages may be added at all. */

@@ -1,5 +1,8 @@
 package com.advnotes.app.editor
 
+import com.advnotes.app.i18n.tr
+import com.advnotes.app.i18n.trn
+
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.compose.foundation.BorderStroke
@@ -122,17 +125,17 @@ fun PagesSidebar(
     Surface(modifier, tonalElevation = 2.dp, shadowElevation = 2.dp) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(if (selecting) "${picked.size} selected" else "Pages", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text(if (selecting) tr("{0} selected", picked.size) else tr("Pages"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 if (selecting) {
                     IconButton(onClick = { confirmDelete = picked }, Modifier.size(40.dp), enabled = picked.isNotEmpty() && !nb.lockPages) {
-                        Icon(Icons.Default.Delete, "Delete selected pages")
+                        Icon(Icons.Default.Delete, tr("Delete selected pages"))
                     }
-                    TextButton(onClick = { selecting = false; picked = emptySet() }) { Text("Done") }
-                } else if (!nb.lockPages) TextButton(onClick = { selecting = true }) { Text("Select") }
-                IconButton(onClick = onClose, Modifier.size(40.dp)) { Icon(Icons.Default.Close, "Close pages") }
+                    TextButton(onClick = { selecting = false; picked = emptySet() }) { Text(tr("Done")) }
+                } else if (!nb.lockPages) TextButton(onClick = { selecting = true }) { Text(tr("Select")) }
+                IconButton(onClick = onClose, Modifier.size(40.dp)) { Icon(Icons.Default.Close, tr("Close pages")) }
             }
             LazyRow(Modifier.fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                item { FilterChip(filter == null, { filter = null }, label = { Text("All") }) }
+                item { FilterChip(filter == null, { filter = null }, label = { Text(tr("All")) }) }
                 items(nb.groups, key = { it.id }) { g ->
                     FilterChip(
                         filter == g.id, { filter = g.id },
@@ -140,22 +143,22 @@ fun PagesSidebar(
                         leadingIcon = { Box(Modifier.size(10.dp).background(Color(g.color), CircleShape)) },
                     )
                 }
-                item { AssistChip(onClick = { newGroup = true }, label = { Text("+ Group") }) }
+                item { AssistChip(onClick = { newGroup = true }, label = { Text(tr("+ Group")) }) }
             }
             if (group != null) {
                 val tight = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "${indices.size} page${if (indices.size == 1) "" else "s"}", style = MaterialTheme.typography.labelMedium,
+                        trn(indices.size, "{0} page", "{0} pages"), style = MaterialTheme.typography.labelMedium,
                         maxLines = 1, softWrap = false, modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { renaming = group }, contentPadding = tight) { Text("Rename", maxLines = 1, softWrap = false) }
-                    TextButton(onClick = { vm.deleteGroup(group.id) }, contentPadding = tight) { Text("Delete", maxLines = 1, softWrap = false) }
+                    TextButton(onClick = { renaming = group }, contentPadding = tight) { Text(tr("Rename"), maxLines = 1, softWrap = false) }
+                    TextButton(onClick = { vm.deleteGroup(group.id) }, contentPadding = tight) { Text(tr("Delete"), maxLines = 1, softWrap = false) }
                 }
             }
             if (indices.isEmpty()) {
                 Text(
-                    "No pages in this group yet. Tap the star on a page to add it.",
+                    tr("No pages in this group yet. Tap the star on a page to add it."),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(12.dp),
                 )
@@ -190,23 +193,23 @@ fun PagesSidebar(
         val label = if (n == 1) "page ${nb.pages.indexOfFirst { it.id in ids } + 1}" else "$n pages"
         AlertDialog(
             onDismissRequest = { confirmDelete = null },
-            title = { Text("Delete $label?") },
-            text = { Text("This can't be undone.") },
+            title = { Text(tr("Delete {0}?", label)) },
+            text = { Text(tr("This can't be undone.")) },
             confirmButton = {
                 TextButton(onClick = {
                     vm.deletePages(ids); confirmDelete = null
                     picked = picked - ids; if (selecting && n > 1) selecting = false
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                }) { Text(tr("Delete"), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(tr("Cancel")) } },
         )
     }
-    if (newGroup) NameDialog("New group", "e.g. Exam, To review", "") { name ->
+    if (newGroup) NameDialog(tr("New group"), tr("e.g. Exam, To review"), "") { name ->
         newGroup = false
         if (name != null) vm.addGroup(name)?.let { filter = it }
     }
     renaming?.let { g ->
-        NameDialog("Rename group", "Group name", g.name) { name -> renaming = null; if (name != null) vm.renameGroup(g.id, name) }
+        NameDialog(tr("Rename group"), tr("Group name"), g.name) { name -> renaming = null; if (name != null) vm.renameGroup(g.id, name) }
     }
 }
 
@@ -239,7 +242,7 @@ private fun PageItem(
             ) {
                 Icon(
                     if (groups.isNotEmpty()) Icons.Default.Star else Icons.Default.StarBorder,
-                    if (groups.isNotEmpty()) "Edit bookmark groups" else "Bookmark page",
+                    if (groups.isNotEmpty()) tr("Edit bookmark groups") else tr("Bookmark page"),
                     Modifier.size(18.dp),
                     tint = groups.firstOrNull()?.let { Color(it.color).copy(alpha = 1f) }?.takeIf { groups.isNotEmpty() } ?: Color.White,
                 )
@@ -254,7 +257,7 @@ private fun PageItem(
             } else if (onDelete != null) IconButton(
                 onClick = onDelete,
                 Modifier.align(Alignment.TopStart).padding(3.dp).size(30.dp).background(Color.Black.copy(alpha = 0.38f), CircleShape),
-            ) { Icon(Icons.Default.Delete, "Delete page ${index + 1}", Modifier.size(18.dp), tint = Color.White) }
+            ) { Icon(Icons.Default.Delete, tr("Delete page {0}", index + 1), Modifier.size(18.dp), tint = Color.White) }
             if (groups.isNotEmpty()) Row(Modifier.align(Alignment.BottomStart).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                 groups.forEach { g -> Box(Modifier.size(9.dp).background(Color(g.color), CircleShape).border(1.dp, Color.White, CircleShape)) }
             }
@@ -268,10 +271,10 @@ private fun GroupChooser(nb: Notebook, page: Page, index: Int, vm: EditorViewMod
     var name by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDone,
-        title = { Text("Bookmark page ${index + 1}") },
+        title = { Text(tr("Bookmark page {0}", index + 1)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (nb.groups.isEmpty()) Text("Make a group first, like “Exam” or “To review”, then pages can be added to it.", style = MaterialTheme.typography.bodySmall)
+                if (nb.groups.isEmpty()) Text(tr("Make a group first, like “Exam” or “To review”, then pages can be added to it."), style = MaterialTheme.typography.bodySmall)
                 nb.groups.forEach { g ->
                     val inGroup = nb.bookmarks.any { it.pageId == page.id && it.groupId == g.id }
                     Row(Modifier.fillMaxWidth().clickable { vm.toggleBookmark(page.id, g.id) }, verticalAlignment = Alignment.CenterVertically) {
@@ -282,15 +285,15 @@ private fun GroupChooser(nb: Notebook, page: Page, index: Int, vm: EditorViewMod
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(name, { name = it }, singleLine = true, modifier = Modifier.weight(1f), placeholder = { Text("New group") })
+                    OutlinedTextField(name, { name = it }, singleLine = true, modifier = Modifier.weight(1f), placeholder = { Text(tr("New group")) })
                     TextButton(enabled = name.isNotBlank(), onClick = {
                         vm.addGroup(name)?.let { vm.toggleBookmark(page.id, it) }
                         name = ""
-                    }) { Text("Add") }
+                    }) { Text(tr("Add")) }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDone) { Text("Done") } },
+        confirmButton = { TextButton(onClick = onDone) { Text(tr("Done")) } },
     )
 }
 
@@ -301,7 +304,7 @@ private fun NameDialog(title: String, hint: String, initial: String, onResult: (
         onDismissRequest = { onResult(null) },
         title = { Text(title) },
         text = { OutlinedTextField(text, { text = it }, singleLine = true, placeholder = { Text(hint) }) },
-        confirmButton = { TextButton(enabled = text.isNotBlank(), onClick = { onResult(text.trim()) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = { onResult(null) }) { Text("Cancel") } },
+        confirmButton = { TextButton(enabled = text.isNotBlank(), onClick = { onResult(text.trim()) }) { Text(tr("Save")) } },
+        dismissButton = { TextButton(onClick = { onResult(null) }) { Text(tr("Cancel")) } },
     )
 }

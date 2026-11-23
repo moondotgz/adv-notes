@@ -1,5 +1,7 @@
 package com.advnotes.app.ai
 
+import com.advnotes.app.i18n.tr
+
 import android.graphics.Bitmap
 import com.advnotes.app.ink.Geometry
 import com.advnotes.app.model.Stroke
@@ -17,7 +19,10 @@ import kotlinx.coroutines.tasks.await
 /** A handwriting language. [tag] is the BCP-47 tag ML Kit uses; null means "detect" (AI only). */
 data class HwLanguage(val name: String, val tag: String?)
 
-enum class HwEngine(val label: String) { ON_DEVICE("On-device"), AI("AI provider") }
+enum class HwEngine(private val en: String) { ON_DEVICE("On-device"), AI("AI provider") ;
+    /** Shown to the user, in the app language. */
+    val label: String get() = tr(en)
+}
 
 object Handwriting {
     val LANGUAGES = listOf(

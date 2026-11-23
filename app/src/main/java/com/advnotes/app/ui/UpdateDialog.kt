@@ -1,5 +1,7 @@
 package com.advnotes.app.ui
 
+import com.advnotes.app.i18n.tr
+
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -45,7 +47,7 @@ fun UpdateDialog(update: Update, onDismiss: () -> Unit) {
                 val apk = Updater.download(ctx, update) { progress = it }
                 progress = null
                 if (Updater.install(ctx, apk)) onDismiss()
-                else Toast.makeText(ctx, "Allow installs from Adv Notes, then tap Install again. The download is kept.", Toast.LENGTH_LONG).show()
+                else Toast.makeText(ctx, tr("Allow installs from Adv Notes, then tap Install again. The download is kept."), Toast.LENGTH_LONG).show()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -56,20 +58,20 @@ fun UpdateDialog(update: Update, onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = { if (progress == null) onDismiss() },
-        title = { Text("Update available") },
+        title = { Text(tr("Update available")) },
         text = {
             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                Text("Adv Notes ${update.version} is out (you have ${BuildConfig.VERSION_NAME}).")
-                if (downloaded) Text("Already downloaded, ready to install.", style = MaterialTheme.typography.bodySmall)
+                Text(tr("Adv Notes {0} is out (you have {1}).", update.version, BuildConfig.VERSION_NAME))
+                if (downloaded) Text(tr("Already downloaded, ready to install."), style = MaterialTheme.typography.bodySmall)
                 else if (update.size > 0) Text("%.1f MB".format(update.size / 1_048_576.0), style = MaterialTheme.typography.bodySmall)
                 if (update.notes.isNotBlank()) Text(update.notes.trim().take(800), style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth())
                 progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
-        confirmButton = { TextButton(onClick = ::start, enabled = progress == null) { Text(if (error != null) "Retry" else if (downloaded) "Install" else "Update") } },
+        confirmButton = { TextButton(onClick = ::start, enabled = progress == null) { Text(if (error != null) tr("Retry") else if (downloaded) tr("Install") else tr("Update")) } },
         dismissButton = {
-            TextButton(onClick = { job?.cancel(); progress = null; onDismiss() }) { Text(if (progress != null) "Cancel" else "Later") }
+            TextButton(onClick = { job?.cancel(); progress = null; onDismiss() }) { Text(if (progress != null) tr("Cancel") else tr("Later")) }
         },
     )
 }

@@ -1,5 +1,7 @@
 package com.advnotes.app.tools.market
 
+import com.advnotes.app.i18n.tr
+
 import com.advnotes.app.ai.AiException
 import com.advnotes.app.ai.Http
 import com.advnotes.app.ai.await
@@ -58,12 +60,12 @@ object Marketplace {
         cache?.let { (t, i) -> if (!force && System.currentTimeMillis() - t < 10 * 60_000) return i }
         val req = Request.Builder().url(url("index.json")).header("Cache-Control", "no-cache").build()
         val body = Http.client.newCall(req).await().use { r ->
-            if (r.code == 404) throw AiException("The tool marketplace isn't available yet.")
-            if (!r.isSuccessful) throw AiException("Couldn't load the tool marketplace (HTTP ${r.code}).")
+            if (r.code == 404) throw AiException(tr("The tool marketplace isn't available yet."))
+            if (!r.isSuccessful) throw AiException(tr("Couldn't load the tool marketplace (HTTP {0}).", r.code))
             r.body?.string().orEmpty()
         }
         val idx = runCatching { json.decodeFromString(Index.serializer(), body) }
-            .getOrElse { throw AiException("The tool marketplace sent an index this app can't read.") }
+            .getOrElse { throw AiException(tr("The tool marketplace sent an index this app can't read.")) }
         cache = System.currentTimeMillis() to idx
         return idx
     }
@@ -86,7 +88,7 @@ object Marketplace {
             val md = MessageDigest.getInstance("SHA-256")
             var n = 0L
             Http.client.newCall(Request.Builder().url(url("${e.path}/${f.path}")).build()).await().use { r ->
-                if (!r.isSuccessful) throw AiException("Download failed for ${f.path} (HTTP ${r.code})")
+                if (!r.isSuccessful) throw AiException(tr("Download failed for {0} (HTTP {1})", f.path, r.code))
                 r.body!!.byteStream().use { input ->
                     out.outputStream().use { o ->
                         val buf = ByteArray(1 shl 16)

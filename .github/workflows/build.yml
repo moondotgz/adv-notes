@@ -26,6 +26,8 @@ jobs:
           "$SDKM" "ndk;27.2.12479018" "cmake;3.22.1" "platforms;android-35" "build-tools;35.0.0"
           echo "sdk.dir=$ANDROID_HOME" > local.properties
       - uses: gradle/actions/setup-gradle@v4
+      - name: Translations up to date
+        run: python3 scripts/i18n.py --check
       - name: Unit tests
         # Robolectric downloads its Android jars from Maven during the first test; that download
         # sometimes fails on the runner, so retry once before treating it as a real failure.

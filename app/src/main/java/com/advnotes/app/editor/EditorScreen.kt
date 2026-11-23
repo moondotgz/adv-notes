@@ -1,5 +1,7 @@
 package com.advnotes.app.editor
 
+import com.advnotes.app.i18n.tr
+
 import android.graphics.Bitmap
 import android.graphics.RectF
 import android.widget.Toast
@@ -190,7 +192,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                     val sel = v.selectionBoundsPage()
                     if (sel != null) vm.insertAnswer(text, sel, below = true)
                     else { val r = v.visiblePageRect(); vm.insertTextAt(text, r.left + 30f, r.top + 40f) }
-                    Toast.makeText(ctx, "Added to page", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, tr("Added to page"), Toast.LENGTH_SHORT).show()
                 }
                 override fun insertImage(image: android.graphics.Bitmap) {
                     val v = canvas ?: return
@@ -232,7 +234,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
         val v = canvas ?: return@rememberLauncherForActivityResult
         if (uri == null) return@rememberLauncherForActivityResult
         vm.insertImage(uri, v.visiblePageRect()) { id ->
-            if (id == null) Toast.makeText(ctx, "Couldn't open that image", Toast.LENGTH_SHORT).show()
+            if (id == null) Toast.makeText(ctx, tr("Couldn't open that image"), Toast.LENGTH_SHORT).show()
             else { canvas?.pendingSelectImage = id; vm.setTool(tool.copy(tool = Tool.LASSO)) }
         }
     }
@@ -267,7 +269,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
     Scaffold(
         topBar = {
             if (!barHidden) TopAppBar(
-                navigationIcon = { IconButton(onClick = leave) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = leave) { Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back")) } },
                 title = {
                     Row(
                         Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = nb != null) { showRename = true }.padding(vertical = 6.dp, horizontal = 4.dp),
@@ -279,50 +281,50 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                             modifier = Modifier.weight(1f, fill = false),
                             style = MaterialTheme.typography.titleMedium,
                         )
-                        Icon(Icons.Default.Edit, "Rename notebook", Modifier.padding(start = 4.dp).size(16.dp),
+                        Icon(Icons.Default.Edit, tr("Rename notebook"), Modifier.padding(start = 4.dp).size(16.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 actions = {
-                    IconButton(onClick = { barHidden = true }) { Icon(Icons.Default.KeyboardArrowUp, "Hide top bar") }
-                    IconButton(onClick = { showPages = !showPages }) { Icon(Icons.Default.ViewSidebar, "Page list") }
+                    IconButton(onClick = { barHidden = true }) { Icon(Icons.Default.KeyboardArrowUp, tr("Hide top bar")) }
+                    IconButton(onClick = { showPages = !showPages }) { Icon(Icons.Default.ViewSidebar, tr("Page list")) }
                     IconButton(onClick = { if (panel.open.isEmpty() && !panel.visible) vm.showPicker() else vm.togglePanel() }) {
-                        Icon(Icons.Default.Widgets, "Tools")
+                        Icon(Icons.Default.Widgets, tr("Tools"))
                     }
                     if (nav == "ARROWS") IconButton(onClick = { vm.goTo(ui.pageIndex - 1) }, enabled = ui.pageIndex > 0) {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous page")
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, tr("Previous page"))
                     }
                     Text("${ui.pageIndex + 1}/${nb?.pages?.size ?: 1}", style = MaterialTheme.typography.labelLarge,
                         modifier = if (nav == "ARROWS") Modifier else Modifier.padding(horizontal = 8.dp))
                     if (nav == "ARROWS") IconButton(onClick = { vm.goTo(ui.pageIndex + 1) }, enabled = nb != null && ui.pageIndex < nb.pages.size - 1) {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next page")
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, tr("Next page"))
                     }
-                    if (nav == "ARROWS" && nb?.lockPages != true) IconButton(onClick = vm::addPage) { Icon(Icons.AutoMirrored.Filled.NoteAdd, "Add page") }
+                    if (nav == "ARROWS" && nb?.lockPages != true) IconButton(onClick = vm::addPage) { Icon(Icons.AutoMirrored.Filled.NoteAdd, tr("Add page")) }
                     Box {
-                        IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, tr("More")) }
                         DropdownMenu(menu, { menu = false }) {
-                            DropdownMenuItem(text = { Text("Paper style…") }, onClick = { menu = false; showPaper = true })
-                            DropdownMenuItem(text = { Text("Page navigation…") }, onClick = { menu = false; showNav = true })
+                            DropdownMenuItem(text = { Text(tr("Paper style…")) }, onClick = { menu = false; showPaper = true })
+                            DropdownMenuItem(text = { Text(tr("Page navigation…")) }, onClick = { menu = false; showNav = true })
                             DropdownMenuItem(
-                                text = { Text(if (nb?.lockPages == true) "Allow adding pages" else "Don't allow adding pages") },
+                                text = { Text(if (nb?.lockPages == true) tr("Allow adding pages") else tr("Don't allow adding pages")) },
                                 onClick = { menu = false; vm.setLockPages(nb?.lockPages != true) },
                             )
-                            DropdownMenuItem(text = { Text("Rename…") }, onClick = { menu = false; showRename = true })
+                            DropdownMenuItem(text = { Text(tr("Rename…")) }, onClick = { menu = false; showRename = true })
                             if (nb?.lockPages != true) {
-                                DropdownMenuItem(text = { Text("New page before this one") }, onClick = { menu = false; vm.insertPage(before = true) })
-                                DropdownMenuItem(text = { Text("New page after this one") }, onClick = { menu = false; vm.insertPage(before = false) })
+                                DropdownMenuItem(text = { Text(tr("New page before this one")) }, onClick = { menu = false; vm.insertPage(before = true) })
+                                DropdownMenuItem(text = { Text(tr("New page after this one")) }, onClick = { menu = false; vm.insertPage(before = false) })
                             }
-                            DropdownMenuItem(text = { Text("Insert pages from file…") }, onClick = { menu = false; insertLauncher.launch(arrayOf("*/*")) })
-                            DropdownMenuItem(text = { Text("Fit page to screen") }, onClick = { menu = false; canvas?.fitPage() })
-                            DropdownMenuItem(text = { Text("Export PDF") }, onClick = {
+                            DropdownMenuItem(text = { Text(tr("Insert pages from file…")) }, onClick = { menu = false; insertLauncher.launch(arrayOf("*/*")) })
+                            DropdownMenuItem(text = { Text(tr("Fit page to screen")) }, onClick = { menu = false; canvas?.fitPage() })
+                            DropdownMenuItem(text = { Text(tr("Export PDF")) }, onClick = {
                                 menu = false
                                 scope.launch {
                                     vm.saveNow()
                                     vm.ui.value.notebook?.let { PdfExporter.share(ctx, PdfExporter.export(ctx, it, settings.pressureCurve)) }
                                 }
                             })
-                            DropdownMenuItem(text = { Text("Delete this page") }, onClick = { menu = false; vm.deletePage() })
-                            DropdownMenuItem(text = { Text("Settings") }, onClick = { menu = false; onSettings() })
+                            DropdownMenuItem(text = { Text(tr("Delete this page")) }, onClick = { menu = false; vm.deletePage() })
+                            DropdownMenuItem(text = { Text(tr("Settings")) }, onClick = { menu = false; onSettings() })
                         }
                     }
                 },
@@ -341,7 +343,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
         }
         val grip: @Composable () -> Unit = {
             DragGrip(
-                "Move toolbar (drag to an edge)",
+                tr("Move toolbar (drag to an edge)"),
                 onTap = {},
                 onDragStart = { dragAt = it }, onDrag = { dragAt = it },
                 onDragEnd = { dragAt?.let { p -> app.settings.update { s -> s.copy(toolbarDock = nearestDock(p).name) } }; dragAt = null },
@@ -357,7 +359,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
         }
         val panelGrip: @Composable () -> Unit = {
             DragGrip(
-                "Move panel (drag left or right, or tap to swap sides)",
+                tr("Move panel (drag left or right, or tap to swap sides)"),
                 onTap = { app.settings.update { it.copy(panelSide = if (panelLeft) "RIGHT" else "LEFT") } },
                 onDragStart = { panelDragAt = it }, onDrag = { panelDragAt = it },
                 onDragEnd = {
@@ -397,7 +399,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                     if (slot > 0 && slotPage == null) {
                         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer), contentAlignment = Alignment.Center) {
                             if (nb?.lockPages != true) OutlinedButton(onClick = vm::appendPage) {
-                                Icon(Icons.AutoMirrored.Filled.NoteAdd, null); Spacer(Modifier.width(8.dp)); Text("Add page")
+                                Icon(Icons.AutoMirrored.Filled.NoteAdd, null); Spacer(Modifier.width(8.dp)); Text(tr("Add page"))
                             }
                         }
                     } else key(slot) {
@@ -412,7 +414,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                                     override fun onStylusSeen() {
                                         canvases.forEach { it?.stylusSeen = true }
                                         if (app.settings.state.value.fingerMode == com.advnotes.app.data.FingerMode.AUTO) {
-                                            Toast.makeText(c, "Pen detected – fingers now scroll and zoom", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(c, tr("Pen detected – fingers now scroll and zoom"), Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                     override fun onSwipePage(dir: Int) {
@@ -550,7 +552,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                 onClick = { barHidden = false },
                 modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ) { Icon(Icons.Default.KeyboardArrowDown, "Show top bar") }
+            ) { Icon(Icons.Default.KeyboardArrowDown, tr("Show top bar")) }
         }
         dragAt?.let { p -> DropHint(nearestDock(p), area) }
         panelDragAt?.let { p -> DropHint(if (p.x < area.center.x) Dock.LEFT else Dock.RIGHT, area, thickness = 0.35f) }
@@ -563,14 +565,14 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
         var style by remember { mutableStateOf(page?.paper ?: nb.paper) }
         AlertDialog(
             onDismissRequest = { showPaper = false },
-            title = { Text("Paper style") },
+            title = { Text(tr("Paper style")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     PaperPicker(style) { style = it }
                     listOf(
-                        EditorViewModel.PaperScope.ALL to "All pages",
-                        EditorViewModel.PaperScope.THIS_PAGE to "This page only",
-                        EditorViewModel.PaperScope.FROM_HERE to "This page and all after it (new pages too)",
+                        EditorViewModel.PaperScope.ALL to tr("All pages"),
+                        EditorViewModel.PaperScope.THIS_PAGE to tr("This page only"),
+                        EditorViewModel.PaperScope.FROM_HERE to tr("This page and all after it (new pages too)"),
                     ).forEach { (k, label) ->
                         Row(Modifier.fillMaxWidth().clickable { scopeSel = k }, verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(scopeSel == k, { scopeSel = k }); Text(label)
@@ -578,8 +580,8 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { vm.setPaper(style, scopeSel); showPaper = false }) { Text("Apply") } },
-            dismissButton = { TextButton(onClick = { showPaper = false }) { Text("Cancel") } },
+            confirmButton = { TextButton(onClick = { vm.setPaper(style, scopeSel); showPaper = false }) { Text(tr("Apply")) } },
+            dismissButton = { TextButton(onClick = { showPaper = false }) { Text(tr("Cancel")) } },
         )
     }
 
@@ -587,23 +589,23 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
         var t by remember { mutableStateOf(nb.title) }
         AlertDialog(
             onDismissRequest = { showRename = false },
-            title = { Text("Rename notebook") },
+            title = { Text(tr("Rename notebook")) },
             text = { OutlinedTextField(t, { t = it }, singleLine = true) },
-            confirmButton = { TextButton(onClick = { vm.rename(t.trim().ifEmpty { "Untitled" }); showRename = false }) { Text("Save") } },
-            dismissButton = { TextButton(onClick = { showRename = false }) { Text("Cancel") } },
+            confirmButton = { TextButton(onClick = { vm.rename(t.trim().ifEmpty { "Untitled" }); showRename = false }) { Text(tr("Save")) } },
+            dismissButton = { TextButton(onClick = { showRename = false }) { Text(tr("Cancel")) } },
         )
     }
 
     if (showNav) {
         val opts = listOf(
-            "ARROWS" to "Arrows and new-page button",
-            "HORIZONTAL" to "Horizontal – swipe sideways, pull well past the last page for a new one",
-            "TWO_PAGE" to "Two pages side by side – swipe sideways",
-            "VERTICAL" to "Vertical – swipe up/down, pull well past the last page for a new one",
+            "ARROWS" to tr("Arrows and new-page button"),
+            "HORIZONTAL" to tr("Horizontal – swipe sideways, pull well past the last page for a new one"),
+            "TWO_PAGE" to tr("Two pages side by side – swipe sideways"),
+            "VERTICAL" to tr("Vertical – swipe up/down, pull well past the last page for a new one"),
         )
         AlertDialog(
             onDismissRequest = { showNav = false },
-            title = { Text("Page navigation") },
+            title = { Text(tr("Page navigation")) },
             text = {
                 Column {
                     opts.forEach { (k, label) ->
@@ -616,12 +618,12 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                         }
                     }
                     Text(
-                        "Swipe with one finger when fingers scroll, or two fingers when they draw.",
+                        tr("Swipe with one finger when fingers scroll, or two fingers when they draw."),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             },
-            confirmButton = { TextButton(onClick = { showNav = false }) { Text("Done") } },
+            confirmButton = { TextButton(onClick = { showNav = false }) { Text(tr("Done")) } },
         )
     }
 
@@ -708,8 +710,8 @@ private fun ToolBar(
     var optionsAt by remember { mutableStateOf<String?>(null) }
     val items: @Composable () -> Unit = {
         grip()
-        IconButton(onClick = onUndo, enabled = canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, "Undo") }
-        IconButton(onClick = onRedo, enabled = canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, "Redo") }
+        IconButton(onClick = onUndo, enabled = canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, tr("Undo")) }
+        IconButton(onClick = onRedo, enabled = canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, tr("Redo")) }
         if (vertical) HorizontalDivider(Modifier.width(32.dp).padding(vertical = 6.dp))
         else VerticalDivider(Modifier.height(32.dp).padding(horizontal = 6.dp))
         fun pick(t: Tool) { if (tool.tool == t) { if (t != Tool.LASSO) optionsAt = "tool" } else { optionsAt = null; onChange(tool.copy(tool = t)) } }
@@ -717,14 +719,14 @@ private fun ToolBar(
             ToolButton(icon, label, tool.tool == t) { pick(t) }
             if (tool.tool == t) ToolOptionsPopup(optionsAt == "tool", tool, onChange) { optionsAt = null }
         }
-        T(Icons.Default.Draw, "Pen", Tool.PEN)
-        T(Icons.Default.BorderColor, "Highlighter", Tool.HIGHLIGHTER)
-        T(Icons.Default.AutoFixNormal, "Eraser", Tool.ERASER)
-        T(Icons.Default.Gesture, "Lasso", Tool.LASSO)
-        T(Icons.Default.HorizontalRule, "Line", Tool.LINE)
-        T(Icons.Default.Category, "Shapes", Tool.SHAPE)
-        T(Icons.Default.TextFields, "Text", Tool.TEXT)
-        IconButton(onClick = onImage) { Icon(Icons.Default.AddPhotoAlternate, "Insert image") }
+        T(Icons.Default.Draw, tr("Pen"), Tool.PEN)
+        T(Icons.Default.BorderColor, tr("Highlighter"), Tool.HIGHLIGHTER)
+        T(Icons.Default.AutoFixNormal, tr("Eraser"), Tool.ERASER)
+        T(Icons.Default.Gesture, tr("Lasso"), Tool.LASSO)
+        T(Icons.Default.HorizontalRule, tr("Line"), Tool.LINE)
+        T(Icons.Default.Category, tr("Shapes"), Tool.SHAPE)
+        T(Icons.Default.TextFields, tr("Text"), Tool.TEXT)
+        IconButton(onClick = onImage) { Icon(Icons.Default.AddPhotoAlternate, tr("Insert image")) }
         if (vertical) HorizontalDivider(Modifier.width(32.dp).padding(vertical = 6.dp))
         else VerticalDivider(Modifier.height(32.dp).padding(horizontal = 6.dp))
         when (tool.tool) {
@@ -736,16 +738,16 @@ private fun ToolBar(
             }
             Tool.ERASER -> if (!vertical) EraserMode.entries.forEach { m ->
                 FilterChip(m == tool.eraserMode, { onChange(tool.copy(eraserMode = m)) },
-                    label = { Text(if (m == EraserMode.STROKE) "Whole stroke" else "Partial") })
+                    label = { Text(if (m == EraserMode.STROKE) tr("Whole stroke") else tr("Partial")) })
             }
             Tool.LASSO -> if (!vertical) Text(
-                "Circle ink to select · then move, resize, recolour or solve with AI",
+                tr("Circle ink to select · then move, resize, recolour or solve with AI"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         if (tool.tool != Tool.LASSO) Box {
-            IconButton(onClick = { optionsAt = "tune" }) { Icon(Icons.Default.Tune, "Tool options") }
+            IconButton(onClick = { optionsAt = "tune" }) { Icon(Icons.Default.Tune, tr("Tool options")) }
             ToolOptionsPopup(optionsAt == "tune", tool, onChange) { optionsAt = null }
         }
     }
@@ -816,32 +818,32 @@ private fun ToolOptionsPopup(expanded: Boolean, tool: ToolState, onChange: (Tool
                         Text("Thickness: ${"%.1f".format(tool.penWidth)}")
                         Slider(tool.penWidth, { onChange(tool.copy(penWidth = it)) }, valueRange = 1f..20f)
                         if (tool.tool == Tool.PEN) Text(
-                            "Tip: draw a line or shape and hold the pen still for a moment to snap it to a perfect shape.",
+                            tr("Tip: draw a line or shape and hold the pen still for a moment to snap it to a perfect shape."),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                     Tool.HIGHLIGHTER -> {
-                        Text("Thickness: ${tool.hlWidth.roundToInt()}")
+                        Text(tr("Thickness: {0}", tool.hlWidth.roundToInt()))
                         Slider(tool.hlWidth, { onChange(tool.copy(hlWidth = it)) }, valueRange = 8f..60f)
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Always straight lines", Modifier.weight(1f))
+                            Text(tr("Always straight lines"), Modifier.weight(1f))
                             Switch(tool.hlStraight, { onChange(tool.copy(hlStraight = it)) })
                         }
                     }
                     Tool.ERASER -> {
-                        Text("Size: ${tool.eraserSize.roundToInt()} px")
+                        Text(tr("Size: {0} px", tool.eraserSize.roundToInt()))
                         Slider(tool.eraserSize, { onChange(tool.copy(eraserSize = it)) }, valueRange = 8f..120f)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             EraserMode.entries.forEach { m ->
                                 FilterChip(m == tool.eraserMode, { onChange(tool.copy(eraserMode = m)) },
-                                    label = { Text(if (m == EraserMode.STROKE) "Whole stroke" else "Partial") })
+                                    label = { Text(if (m == EraserMode.STROKE) tr("Whole stroke") else tr("Partial")) })
                             }
                         }
                     }
                     Tool.LASSO -> Unit
                 }
                 if (tool.tool == Tool.SHAPE) {
-                    Text("Shape", style = MaterialTheme.typography.labelLarge)
+                    Text(tr("Shape"), style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ShapeKind.entries.filter { it != ShapeKind.POLYGON }.forEach { k ->
                             FilterChip(k == tool.shape, { onChange(tool.copy(shape = k)) }, label = { Text(k.label) }, leadingIcon = { ShapeIcon(k) })
@@ -870,21 +872,21 @@ private fun SelectionBar(
     Surface(modifier, shape = RoundedCornerShape(26.dp), tonalElevation = 6.dp, shadowElevation = 6.dp) {
         Row(Modifier.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onSolve) {
-                Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Solve")
+                Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tr("Solve"))
             }
-            TextButton(onClick = onToText) { Text("To text") }
-            if (canEditText) IconButton(onClick = onEditText) { Icon(Icons.Default.Edit, "Edit text") }
-            if (hasItems) IconButton(onClick = onDuplicate) { Icon(Icons.Default.ContentCopy, "Duplicate") }
+            TextButton(onClick = onToText) { Text(tr("To text")) }
+            if (canEditText) IconButton(onClick = onEditText) { Icon(Icons.Default.Edit, tr("Edit text")) }
+            if (hasItems) IconButton(onClick = onDuplicate) { Icon(Icons.Default.ContentCopy, tr("Duplicate")) }
             if (hasItems) Box {
-                IconButton(onClick = { colors = true }) { Icon(Icons.Default.Palette, "Colour") }
+                IconButton(onClick = { colors = true }) { Icon(Icons.Default.Palette, tr("Colour")) }
                 DropdownMenu(colors, { colors = false }) {
                     Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         PEN_COLORS.forEach { c -> ColorDot(c, false) { onColor(c); colors = false } }
                     }
                 }
             }
-            if (hasItems) IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, "Delete") }
-            IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Deselect") }
+            if (hasItems) IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, tr("Delete")) }
+            IconButton(onClick = onClose) { Icon(Icons.Default.Close, tr("Deselect")) }
         }
     }
 }
@@ -896,22 +898,22 @@ private fun TextDialog(existing: TextBox?, defaultColor: Int, onDismiss: () -> U
     var color by remember { mutableStateOf(existing?.color ?: defaultColor) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (existing == null) "Add text" else "Edit text") },
+        title = { Text(if (existing == null) tr("Add text") else tr("Edit text")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(text, { text = it }, modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp))
-                Text("Size: ${size.roundToInt()}")
+                Text(tr("Size: {0}", size.roundToInt()))
                 Slider(size, { size = it }, valueRange = 12f..60f)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     PEN_COLORS.forEach { c -> ColorDot(c, c == color) { color = c } }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(text, size, color) }) { Text("Save") } },
+        confirmButton = { TextButton(onClick = { onSave(text, size, color) }) { Text(tr("Save")) } },
         dismissButton = {
             Row {
-                if (existing != null) TextButton(onClick = { onSave("", size, color) }) { Text("Delete") }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                if (existing != null) TextButton(onClick = { onSave("", size, color) }) { Text(tr("Delete")) }
+                TextButton(onClick = onDismiss) { Text(tr("Cancel")) }
             }
         },
     )
@@ -956,11 +958,11 @@ private fun AiSheet(
                 Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Solver", style = MaterialTheme.typography.titleMedium)
+                    Text(tr("Solver"), style = MaterialTheme.typography.titleMedium)
                     Text("${provider.label} · $modelLabel", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                TextButton(onClick = onSettings) { Text("Change") }
+                TextButton(onClick = onSettings) { Text(tr("Change")) }
             }
             Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp) {
                 Image(
@@ -968,25 +970,25 @@ private fun AiSheet(
                     Modifier.fillMaxWidth().heightIn(max = 160.dp).padding(8.dp),
                 )
             }
-            Text("Subject", style = MaterialTheme.typography.labelLarge)
+            Text(tr("Subject"), style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 com.advnotes.app.ai.Subject.entries.forEach { sub -> FilterChip(sub == subject, { subject = sub }, label = { Text(sub.label) }) }
             }
-            Text("What to do", style = MaterialTheme.typography.labelLarge)
+            Text(tr("What to do"), style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SolveMode.entries.forEach { m -> FilterChip(m == mode, { mode = m }, label = { Text(m.label) }) }
             }
             OutlinedTextField(
                 extra, { extra = it }, modifier = Modifier.fillMaxWidth(),
-                label = { Text("Extra instructions (optional)") },
-                placeholder = { Text("e.g. solve for x, use radians, answer in kJ/mol") },
+                label = { Text(tr("Extra instructions (optional)")) },
+                placeholder = { Text(tr("e.g. solve for x, use radians, answer in kJ/mol")) },
             )
             val running = ai is AiState.Running
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { vm.solve(image, mode, extra, subject) }, enabled = !running) {
-                    Text(if (ai is AiState.Done || ai is AiState.Error) "Ask again" else "Solve")
+                    Text(if (ai is AiState.Done || ai is AiState.Error) tr("Ask again") else tr("Solve"))
                 }
-                if (running) OutlinedButton(onClick = vm::cancelAi) { Text("Stop") }
+                if (running) OutlinedButton(onClick = vm::cancelAi) { Text(tr("Stop")) }
             }
             when (val s = ai) {
                 AiState.Idle -> Unit
@@ -995,7 +997,7 @@ private fun AiSheet(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(10.dp))
-                            Text("Thinking…")
+                            Text(tr("Thinking…"))
                         }
                     } else {
                         LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -1006,11 +1008,11 @@ private fun AiSheet(
                     var edited by remember(s.text) { mutableStateOf(s.text) }
                     OutlinedTextField(
                         edited, { edited = it }, modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Answer (edit before writing)") },
+                        label = { Text(tr("Answer (edit before writing)")) },
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { onInsert(edited) }, enabled = edited.isNotBlank()) { Text("Write on page") }
-                        OutlinedButton(onClick = { clipboard.setText(AnnotatedString(edited)) }) { Text("Copy") }
+                        Button(onClick = { onInsert(edited) }, enabled = edited.isNotBlank()) { Text(tr("Write on page")) }
+                        OutlinedButton(onClick = { clipboard.setText(AnnotatedString(edited)) }) { Text(tr("Copy")) }
                     }
                 }
                 is AiState.Error -> Text(s.message, color = MaterialTheme.colorScheme.error)
@@ -1068,7 +1070,7 @@ private fun HandwritingSheet(
                 text = if (engine == com.advnotes.app.ai.HwEngine.ON_DEVICE) {
                     com.advnotes.app.ai.Handwriting.recognizeOnDevice(req.strokes, lang) { status = it }
                 } else {
-                    status = "Asking ${settings.provider.label}…"
+                    status = tr("Asking {0}…", settings.provider.label)
                     val client = com.advnotes.app.ai.AiClients.forProvider(settings.provider, app.settings, app.chatGpt, app.local)
                     com.advnotes.app.ai.Handwriting.recognizeAi(client, req.image ?: error("No image"), lang) { text = it }
                 }
@@ -1087,7 +1089,7 @@ private fun HandwritingSheet(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Handwriting to text", style = MaterialTheme.typography.titleMedium)
+            Text(tr("Handwriting to text"), style = MaterialTheme.typography.titleMedium)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box {
                     OutlinedButton(onClick = { langMenu = true }) { Text(lang.name) }
@@ -1107,8 +1109,8 @@ private fun HandwritingSheet(
                 }
             }
             Text(
-                if (engine == com.advnotes.app.ai.HwEngine.ON_DEVICE) "Recognised on this device from your pen strokes (Google ML Kit). Works offline after the language model downloads."
-                else "Sent as an image to ${settings.provider.label}. Also reads printed text and mixed languages.",
+                if (engine == com.advnotes.app.ai.HwEngine.ON_DEVICE) tr("Recognised on this device from your pen strokes (Google ML Kit). Works offline after the language model downloads.")
+                else tr("Sent as an image to {0}. Also reads printed text and mixed languages.", settings.provider.label),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             status?.let {
@@ -1119,12 +1121,12 @@ private fun HandwritingSheet(
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             OutlinedTextField(
                 text, { text = it }, modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                label = { Text("Text (you can edit it)") },
+                label = { Text(tr("Text (you can edit it)")) },
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (hasInk) Button(enabled = text.isNotBlank(), onClick = { onReplace(text, 24f) }) { Text("Replace ink") }
-                OutlinedButton(enabled = text.isNotBlank(), onClick = { onAddBelow(text) }) { Text(if (hasInk) "Keep ink, add text" else "Add to page") }
-                TextButton(enabled = text.isNotBlank(), onClick = { clipboard.setText(AnnotatedString(text)) }) { Text("Copy") }
+                if (hasInk) Button(enabled = text.isNotBlank(), onClick = { onReplace(text, 24f) }) { Text(tr("Replace ink")) }
+                OutlinedButton(enabled = text.isNotBlank(), onClick = { onAddBelow(text) }) { Text(if (hasInk) tr("Keep ink, add text") else tr("Add to page")) }
+                TextButton(enabled = text.isNotBlank(), onClick = { clipboard.setText(AnnotatedString(text)) }) { Text(tr("Copy")) }
             }
             Spacer(Modifier.height(16.dp))
         }

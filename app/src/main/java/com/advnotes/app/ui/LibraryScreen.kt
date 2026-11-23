@@ -1,5 +1,8 @@
 package com.advnotes.app.ui
 
+import com.advnotes.app.i18n.tr
+import com.advnotes.app.i18n.trn
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -191,7 +194,7 @@ fun LibraryScreen(
             ExtendedFloatingActionButton(
                 onClick = { creating = true },
                 icon = { Icon(Icons.Default.Add, null) },
-                text = { Text("New notebook") },
+                text = { Text(tr("New notebook")) },
                 shape = MaterialTheme.shapes.large,
             )
         },
@@ -208,40 +211,40 @@ fun LibraryScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Notebooks", style = MaterialTheme.typography.headlineMedium)
+                            Text(tr("Notebooks"), style = MaterialTheme.typography.headlineMedium)
                             Text(
                                 when {
-                                    notebooks.isEmpty() -> "Nothing here yet"
-                                    else -> "${notebooks.size} notebook${if (notebooks.size == 1) "" else "s"}" +
-                                        ((sync as? SyncStatus.Done)?.let { " · synced " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it.at)) } ?: "")
+                                    notebooks.isEmpty() -> tr("Nothing here yet")
+                                    else -> trn(notebooks.size, "{0} notebook", "{0} notebooks") +
+                                        ((sync as? SyncStatus.Done)?.let { " · " + tr("synced") + " " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it.at)) } ?: "")
                                 },
                                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         FilledTonalIconButton(onClick = { importLauncher.launch(arrayOf("*/*")) }) {
-                            Icon(Icons.Default.FileOpen, "Import (PDF, images, Samsung Notes, Xournal++)")
+                            Icon(Icons.Default.FileOpen, tr("Import (PDF, images, Samsung Notes, Xournal++)"))
                         }
                         if (settings.driveAccount != null) {
                             FilledTonalIconButton(onClick = { scope.launch { app.drive.sync() } }, enabled = sync !is SyncStatus.Running) {
                                 when (sync) {
                                     SyncStatus.Running -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                                    is SyncStatus.Done -> Icon(Icons.Default.CloudDone, "Synced")
-                                    is SyncStatus.Error, SyncStatus.NeedsSignIn -> Icon(Icons.Default.CloudOff, "Sync problem")
-                                    SyncStatus.Idle -> Icon(Icons.Default.CloudSync, "Sync now")
+                                    is SyncStatus.Done -> Icon(Icons.Default.CloudDone, tr("Synced"))
+                                    is SyncStatus.Error, SyncStatus.NeedsSignIn -> Icon(Icons.Default.CloudOff, tr("Sync problem"))
+                                    SyncStatus.Idle -> Icon(Icons.Default.CloudSync, tr("Sync now"))
                                 }
                             }
                         }
                         FilledTonalIconButton(onClick = onTrash) {
                             androidx.compose.material3.BadgedBox(badge = {
                                 if (trashedCount > 0) androidx.compose.material3.Badge { Text("$trashedCount") }
-                            }) { Icon(Icons.Default.DeleteOutline, "Trash") }
+                            }) { Icon(Icons.Default.DeleteOutline, tr("Trash")) }
                         }
-                        FilledTonalIconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Settings") }
+                        FilledTonalIconButton(onClick = onSettings) { Icon(Icons.Default.Settings, tr("Settings")) }
                     }
                     if (notebooks.isNotEmpty()) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             SearchPill(query, { query = it }, Modifier.weight(1f))
-                            FilterChip(!byName, { byName = false }, label = { Text("Recent") })
+                            FilterChip(!byName, { byName = false }, label = { Text(tr("Recent")) })
                             FilterChip(byName, { byName = true }, label = { Text("A–Z") })
                         }
                     }
@@ -292,18 +295,18 @@ fun LibraryScreen(
         var addPages by remember(p) { mutableStateOf(!settings.pdfLockPages) }
         AlertDialog(
             onDismissRequest = { pendingImport = null; p.done() },
-            title = { Text(if (p.uris.size > 1) "Import PDFs" else "Import PDF") },
+            title = { Text(if (p.uris.size > 1) tr("Import PDFs") else tr("Import PDF")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "The imported pages keep the PDF's own look, so a Samsung Notes export keeps its note style.",
+                        tr("The imported pages keep the PDF's own look, so a Samsung Notes export keeps its note style."),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                            Text("Allow adding new pages", style = MaterialTheme.typography.bodyLarge)
+                            Text(tr("Allow adding new pages"), style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                if (addPages) "New pages use this Adv Notes paper:" else "The notebook keeps exactly the PDF's pages.",
+                                if (addPages) tr("New pages use this Adv Notes paper:") else tr("The notebook keeps exactly the PDF's pages."),
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -317,24 +320,24 @@ fun LibraryScreen(
                     app.settings.update { it.copy(pdfPaper = paper.name, pdfLockPages = !addPages) }
                     pendingImport = null
                     scope.launch { runImport(p.uris, com.advnotes.app.importer.PdfImportOptions(paper, lockPages = !addPages), p.done) }
-                }) { Text("Import") }
+                }) { Text(tr("Import")) }
             },
-            dismissButton = { TextButton(onClick = { pendingImport = null; p.done() }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { pendingImport = null; p.done() }) { Text(tr("Cancel")) } },
         )
     }
     if (importing) {
         AlertDialog(
             onDismissRequest = {},
             confirmButton = {},
-            title = { Text("Importing…") },
+            title = { Text(tr("Importing…")) },
             text = { androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) },
         )
     }
     deleting?.let { s ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text("Move “${s.title}” to the trash?") },
-            text = { Text("It stays in the trash for $TRASH_DAYS days, so you can restore it, and is then deleted for good" + if (settings.driveAccount != null) " (also from Google Drive)." else ".") },
+            title = { Text(tr("Move “{0}” to the trash?", s.title)) },
+            text = { Text(tr("It stays in the trash for {0} days, so you can restore it, and is then deleted for good", TRASH_DAYS) + if (settings.driveAccount != null) tr(" (also from Google Drive).") else ".") },
             confirmButton = {
                 TextButton(onClick = {
                     deleting = null
@@ -343,9 +346,9 @@ fun LibraryScreen(
                         val r = snackbar.showSnackbar("Moved “${s.title}” to the trash", actionLabel = "Undo")
                         if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) app.repo.restore(s.id)
                     }
-                }) { Text("Move to trash") }
+                }) { Text(tr("Move to trash")) }
             },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text(tr("Cancel")) } },
         )
     }
 }
@@ -379,18 +382,18 @@ private fun NotebookCard(nb: NotebookSummary, onClick: () -> Unit, onEdit: () ->
                         .fillMaxWidth().aspectRatio(1.35f),
                 ) { PaperPreview(nb.paper, nb.paperColor, Modifier.fillMaxSize(), zoom = 3f) }
                 Text(
-                    "${nb.pageCount} page${if (nb.pageCount == 1) "" else "s"}",
+                    trn(nb.pageCount, "{0} page", "{0} pages"),
                     style = MaterialTheme.typography.labelMedium, color = Color(0xEEFFFFFF),
                     modifier = Modifier.align(Alignment.BottomStart).padding(start = 24.dp, bottom = 12.dp),
                 )
                 IconButton(onClick = { menu = true }, modifier = Modifier.align(Alignment.BottomEnd)) {
-                    Icon(Icons.Default.MoreVert, "More", tint = Color(0xEEFFFFFF))
+                    Icon(Icons.Default.MoreVert, tr("More"), tint = Color(0xEEFFFFFF))
                 }
             }
             DropdownMenu(menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Edit") }, onClick = { menu = false; onEdit() })
-                DropdownMenuItem(text = { Text("Export PDF") }, onClick = { menu = false; onExport() })
-                DropdownMenuItem(text = { Text("Move to trash") }, onClick = { menu = false; onDelete() })
+                DropdownMenuItem(text = { Text(tr("Edit")) }, onClick = { menu = false; onEdit() })
+                DropdownMenuItem(text = { Text(tr("Export PDF")) }, onClick = { menu = false; onExport() })
+                DropdownMenuItem(text = { Text(tr("Move to trash")) }, onClick = { menu = false; onDelete() })
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -412,7 +415,7 @@ private fun SearchPill(value: String, onChange: (String) -> Unit, modifier: Modi
             Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.width(10.dp))
             Box(Modifier.weight(1f)) {
-                if (value.isEmpty()) Text("Search notebooks", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (value.isEmpty()) Text(tr("Search notebooks"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 androidx.compose.foundation.text.BasicTextField(
                     value, onChange, singleLine = true,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
@@ -420,7 +423,7 @@ private fun SearchPill(value: String, onChange: (String) -> Unit, modifier: Modi
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            if (value.isNotEmpty()) IconButton(onClick = { onChange("") }) { Icon(Icons.Default.Close, "Clear search") }
+            if (value.isNotEmpty()) IconButton(onClick = { onChange("") }) { Icon(Icons.Default.Close, tr("Clear search")) }
         }
     }
 }
@@ -433,17 +436,17 @@ private fun EmptyLibrary(onNew: () -> Unit, onImport: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.AutoMirrored.Filled.MenuBook, null, Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer) }
         Spacer(Modifier.height(20.dp))
-        Text("Start your first notebook", style = MaterialTheme.typography.titleLarge)
+        Text(tr("Start your first notebook"), style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(6.dp))
         Text(
-            "Write with your S Pen on grid, Oxford or plain paper — or bring in a PDF, images,\na Samsung Notes or a Xournal++ file.",
+            tr("Write with your S Pen on grid, Oxford or plain paper — or bring in a PDF, images,\na Samsung Notes or a Xournal++ file."),
             color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            androidx.compose.material3.Button(onClick = onNew) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("New notebook") }
-            androidx.compose.material3.OutlinedButton(onClick = onImport) { Icon(Icons.Default.FileOpen, null); Spacer(Modifier.width(8.dp)); Text("Import") }
+            androidx.compose.material3.Button(onClick = onNew) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text(tr("New notebook")) }
+            androidx.compose.material3.OutlinedButton(onClick = onImport) { Icon(Icons.Default.FileOpen, null); Spacer(Modifier.width(8.dp)); Text(tr("Import")) }
         }
     }
 }
@@ -460,19 +463,19 @@ fun NotebookDialog(
     var cover by remember { mutableStateOf(existing?.cover ?: COVER_COLORS.random()) }
     AlertDialog(
         onDismissRequest = { onDone(null, paper, color, cover) },
-        title = { Text(if (existing == null) "New notebook" else "Edit notebook") },
+        title = { Text(if (existing == null) tr("New notebook") else tr("Edit notebook")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Text("Paper", style = MaterialTheme.typography.labelLarge)
+                OutlinedTextField(title, { title = it }, label = { Text(tr("Title")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Text(tr("Paper"), style = MaterialTheme.typography.labelLarge)
                 PaperPicker(paper) { paper = it }
-                Text("Paper colour", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Paper colour"), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PaperColor.entries.forEach { c ->
                         FilterChip(selected = c == color, onClick = { color = c }, label = { Text(c.label) })
                     }
                 }
-                Text("Cover", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Cover"), style = MaterialTheme.typography.labelLarge)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(COVER_COLORS) { c -> ColorDot(c, c == cover) { cover = c } }
                 }
@@ -480,10 +483,10 @@ fun NotebookDialog(
         },
         confirmButton = {
             TextButton(onClick = { onDone(title.trim().ifEmpty { "Untitled" }, paper, color, cover) }) {
-                Text(if (existing == null) "Create" else "Save")
+                Text(if (existing == null) tr("Create") else tr("Save"))
             }
         },
-        dismissButton = { TextButton(onClick = { onDone(null, paper, color, cover) }) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = { onDone(null, paper, color, cover) }) { Text(tr("Cancel")) } },
     )
 }
 

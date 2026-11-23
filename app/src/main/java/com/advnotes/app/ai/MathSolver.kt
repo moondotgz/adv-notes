@@ -1,9 +1,11 @@
 package com.advnotes.app.ai
 
+import com.advnotes.app.i18n.tr
+
 import android.graphics.Bitmap
 import java.io.ByteArrayOutputStream
 
-enum class Subject(val label: String, val guidance: String) {
+enum class Subject(private val en: String, val guidance: String) {
     AUTO(
         "Auto",
         "First decide whether this is math, physics or chemistry (or another STEM subject) and follow the matching conventions below.",
@@ -11,9 +13,12 @@ enum class Subject(val label: String, val guidance: String) {
     MATH("Math", ""),
     PHYSICS("Physics", ""),
     CHEMISTRY("Chemistry", ""),
+;
+    /** Shown to the user, in the app language. */
+    val label: String get() = tr(en)
 }
 
-enum class SolveMode(val label: String, val instruction: String) {
+enum class SolveMode(private val en: String, val instruction: String) {
     SOLVE(
         "Solve",
         "First write a line starting with \"Problem:\" containing your transcription of the handwriting or printed question. " +
@@ -33,6 +38,9 @@ enum class SolveMode(val label: String, val instruction: String) {
         "Transcribe the problem on a line starting with \"Problem:\", then give one helpful hint for the next step " +
             "without revealing the final answer.",
     ),
+;
+    /** Shown to the user, in the app language. */
+    val label: String get() = tr(en)
 }
 
 /** Builds solver requests for handwritten or printed STEM problems. */

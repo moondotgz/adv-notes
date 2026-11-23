@@ -1,5 +1,8 @@
 package com.advnotes.app.ui
 
+import com.advnotes.app.i18n.tr
+import com.advnotes.app.i18n.trn
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,9 +67,9 @@ fun TrashScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Trash") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-                actions = { if (trashed.isNotEmpty()) TextButton(onClick = { emptying = true }) { Text("Empty trash") } },
+                title = { Text(tr("Trash")) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back")) } },
+                actions = { if (trashed.isNotEmpty()) TextButton(onClick = { emptying = true }) { Text(tr("Empty trash")) } },
             )
         },
     ) { pad ->
@@ -75,9 +78,9 @@ fun TrashScreen(onBack: () -> Unit) {
                 Column(Modifier.align(Alignment.Center).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.DeleteForever, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.outline)
                     Spacer(Modifier.size(12.dp))
-                    Text("The trash is empty", style = MaterialTheme.typography.titleMedium)
+                    Text(tr("The trash is empty"), style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Deleted notebooks wait here for $TRASH_DAYS days before they are removed for good.",
+                        tr("Deleted notebooks wait here for {0} days before they are removed for good.", TRASH_DAYS),
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -89,7 +92,7 @@ fun TrashScreen(onBack: () -> Unit) {
                 ) {
                     item {
                         Text(
-                            "Notebooks here are deleted for good $TRASH_DAYS days after you trashed them.",
+                            tr("Notebooks here are deleted for good {0} days after you trashed them.", TRASH_DAYS),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -102,14 +105,14 @@ fun TrashScreen(onBack: () -> Unit) {
                                 Column(Modifier.weight(1f)) {
                                     Text(nb.title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
                                     Text(
-                                        "${nb.pageCount} page${if (nb.pageCount == 1) "" else "s"} · trashed " +
+                                        trn(nb.pageCount, "{0} page", "{0} pages") + " · " + tr("trashed") + " " +
                                             DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(nb.trashedAt)) +
-                                            " · " + if (left <= 1) "deleted within a day" else "deleted in $left days",
+                                            " · " + if (left <= 1) tr("deleted within a day") else tr("deleted in {0} days", left),
                                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                IconButton(onClick = { scope.launch { app.repo.restore(nb.id) } }) { Icon(Icons.Default.RestoreFromTrash, "Restore") }
-                                IconButton(onClick = { deleting = nb }) { Icon(Icons.Default.DeleteForever, "Delete for good") }
+                                IconButton(onClick = { scope.launch { app.repo.restore(nb.id) } }) { Icon(Icons.Default.RestoreFromTrash, tr("Restore")) }
+                                IconButton(onClick = { deleting = nb }) { Icon(Icons.Default.DeleteForever, tr("Delete for good")) }
                             }
                         }
                     }
@@ -121,19 +124,19 @@ fun TrashScreen(onBack: () -> Unit) {
     deleting?.let { nb ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text("Delete “${nb.title}” for good?") },
-            text = { Text("This can't be undone.") },
-            confirmButton = { TextButton(onClick = { deleting = null; scope.launch { app.repo.delete(nb.id) } }) { Text("Delete") } },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+            title = { Text(tr("Delete “{0}” for good?", nb.title)) },
+            text = { Text(tr("This can't be undone.")) },
+            confirmButton = { TextButton(onClick = { deleting = null; scope.launch { app.repo.delete(nb.id) } }) { Text(tr("Delete")) } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text(tr("Cancel")) } },
         )
     }
     if (emptying) {
         AlertDialog(
             onDismissRequest = { emptying = false },
-            title = { Text("Empty the trash?") },
-            text = { Text("${trashed.size} notebook${if (trashed.size == 1) "" else "s"} will be deleted for good. This can't be undone.") },
-            confirmButton = { TextButton(onClick = { emptying = false; scope.launch { app.repo.emptyTrash() } }) { Text("Empty trash") } },
-            dismissButton = { TextButton(onClick = { emptying = false }) { Text("Cancel") } },
+            title = { Text(tr("Empty the trash?")) },
+            text = { Text(trn(trashed.size, "{0} notebook will be deleted for good. This can't be undone.", "{0} notebooks will be deleted for good. This can't be undone.")) },
+            confirmButton = { TextButton(onClick = { emptying = false; scope.launch { app.repo.emptyTrash() } }) { Text(tr("Empty trash")) } },
+            dismissButton = { TextButton(onClick = { emptying = false }) { Text(tr("Cancel")) } },
         )
     }
 }

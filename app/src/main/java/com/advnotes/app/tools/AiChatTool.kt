@@ -1,5 +1,7 @@
 package com.advnotes.app.tools
 
+import com.advnotes.app.i18n.tr
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
@@ -79,8 +81,8 @@ import kotlinx.serialization.builtins.ListSerializer
 /** General-purpose AI chat for everything the solver doesn't cover. */
 object AiChatTool : NotebookTool {
     override val id = "aichat"
-    override val name = "AI chat"
-    override val description = "Ask anything: explanations, essays, languages, quizzes, flashcards; can look at your selection or page"
+    override val name  get() = tr("AI chat")
+    override val description  get() = tr("Ask anything: explanations, essays, languages, quizzes, flashcards; can look at your selection or page")
     override val icon = Icons.AutoMirrored.Filled.Chat
 
     private const val SYSTEM = """You are a helpful study assistant inside a handwriting note-taking app.
@@ -125,7 +127,7 @@ Be concise unless asked for detail. Answer in the language the student writes in
         fun loadPhoto(uri: android.net.Uri?) {
             if (uri == null) return
             val bmp = loadScaled(context, uri)
-            if (bmp == null) error = "Couldn't open that image." else { photo = bmp; error = null }
+            if (bmp == null) error = tr("Couldn't open that image.") else { photo = bmp; error = null }
         }
         val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { loadPhoto(it) }
         val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> if (ok) loadPhoto(cameraUri) }
@@ -144,7 +146,7 @@ Be concise unless asked for detail. Answer in the language the student writes in
             if ((text.isBlank() && pic == null) || streaming != null) return
             error = null
             val image = when (attachment) {
-                "selection" -> host.selectionImage() ?: run { error = "Select something with the lasso first."; return }
+                "selection" -> host.selectionImage() ?: run { error = tr("Select something with the lasso first."); return }
                 "page" -> host.pageImage()
                 else -> null
             }
@@ -181,10 +183,10 @@ Be concise unless asked for detail. Answer in the language the student writes in
         confirmDelete?.let { c ->
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { confirmDelete = null },
-                title = { Text("Delete chat?") },
-                text = { Text("“${c.title}” will be deleted.") },
-                confirmButton = { androidx.compose.material3.TextButton(onClick = { deleteChat(c); confirmDelete = null }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
-                dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
+                title = { Text(tr("Delete chat?")) },
+                text = { Text(tr("“{0}” will be deleted.", c.title)) },
+                confirmButton = { androidx.compose.material3.TextButton(onClick = { deleteChat(c); confirmDelete = null }) { Text(tr("Delete"), color = MaterialTheme.colorScheme.error) } },
+                dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmDelete = null }) { Text(tr("Cancel")) } },
             )
         }
         Column(Modifier.fillMaxSize()) {
@@ -195,21 +197,21 @@ Be concise unless asked for detail. Answer in the language the student writes in
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Box {
-                    IconButton(onClick = { historyMenu = true }, enabled = chats.isNotEmpty()) { Icon(Icons.Default.History, "Past chats") }
+                    IconButton(onClick = { historyMenu = true }, enabled = chats.isNotEmpty()) { Icon(Icons.Default.History, tr("Past chats")) }
                     DropdownMenu(historyMenu, { historyMenu = false }, Modifier.heightIn(max = 400.dp)) {
                         chats.sortedByDescending { it.updated }.forEach { c ->
                             DropdownMenuItem(
                                 text = { Text(c.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 onClick = { current = c; historyMenu = false },
                                 trailingIcon = {
-                                    IconButton(onClick = { confirmDelete = c }) { Icon(Icons.Default.Delete, "Delete chat") }
+                                    IconButton(onClick = { confirmDelete = c }) { Icon(Icons.Default.Delete, tr("Delete chat")) }
                                 },
                             )
                         }
                     }
                 }
-                if (current.messages.isNotEmpty()) IconButton(onClick = { confirmDelete = current }) { Icon(Icons.Default.Delete, "Delete this chat") }
-                IconButton(onClick = { job?.cancel(); current = Chat(); error = null }) { Icon(Icons.Default.Add, "New chat") }
+                if (current.messages.isNotEmpty()) IconButton(onClick = { confirmDelete = current }) { Icon(Icons.Default.Delete, tr("Delete this chat")) }
+                IconButton(onClick = { job?.cancel(); current = Chat(); error = null }) { Icon(Icons.Default.Add, tr("New chat")) }
             }
             HorizontalDivider()
 
@@ -217,14 +219,14 @@ Be concise unless asked for detail. Answer in the language the student writes in
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (current.messages.isEmpty() && streaming == null) item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Ask anything — this chat can also look at your lasso selection or the visible page.",
+                        Text(tr("Ask anything — this chat can also look at your lasso selection or the visible page."),
                             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         listOf(
-                            "Explain my selection simply" to "selection",
-                            "Quiz me on this page with 5 questions" to "page",
-                            "Make flashcards (front – back) from this page" to "page",
-                            "Translate my selection into English" to "selection",
-                            "Check the grammar of my selection" to "selection",
+                            tr("Explain my selection simply") to "selection",
+                            tr("Quiz me on this page with 5 questions") to "page",
+                            tr("Make flashcards (front – back) from this page") to "page",
+                            tr("Translate my selection into English") to "selection",
+                            tr("Check the grammar of my selection") to "selection",
                         ).forEach { (p, a) -> AssistChip(onClick = { send(p, a) }, label = { Text(p) }) }
                     }
                 }
@@ -233,7 +235,7 @@ Be concise unless asked for detail. Answer in the language the student writes in
                 streaming?.let { s ->
                     item {
                         if (s.isEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Spacer(Modifier.size(8.dp)); Text("Thinking…")
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Spacer(Modifier.size(8.dp)); Text(tr("Thinking…"))
                         } else Bubble(false, s, null, {}, {})
                     }
                 }
@@ -241,14 +243,14 @@ Be concise unless asked for detail. Answer in the language the student writes in
             }
 
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilterChip(attach == "selection", { attach = if (attach == "selection") null else "selection" }, label = { Text("📎 Selection") })
-                FilterChip(attach == "page", { attach = if (attach == "page") null else "page" }, label = { Text("📎 Visible page") })
+                FilterChip(attach == "selection", { attach = if (attach == "selection") null else "selection" }, label = { Text(tr("📎 Selection")) })
+                FilterChip(attach == "page", { attach = if (attach == "page") null else "page" }, label = { Text(tr("📎 Visible page")) })
             }
             photo?.let { bmp ->
                 Box(Modifier.padding(start = 12.dp, top = 6.dp)) {
                     Image(bmp.asImageBitmap(), "Attached photo", Modifier.height(72.dp).widthIn(max = 160.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
                     IconButton(onClick = { photo = null }, Modifier.align(Alignment.TopEnd).size(24.dp)
-                        .photoCloseBg()) { Icon(Icons.Default.Close, "Remove photo", Modifier.size(16.dp), tint = androidx.compose.ui.graphics.Color.White) }
+                        .photoCloseBg()) { Icon(Icons.Default.Close, tr("Remove photo"), Modifier.size(16.dp), tint = androidx.compose.ui.graphics.Color.White) }
                 }
             }
             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -259,14 +261,14 @@ Be concise unless asked for detail. Answer in the language the student writes in
                         val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", f)
                         cameraUri = uri
                         takePhoto.launch(uri)
-                    }.onFailure { error = "No camera app available." }
-                }) { Icon(Icons.Default.PhotoCamera, "Take photo") }
+                    }.onFailure { error = tr("No camera app available.") }
+                }) { Icon(Icons.Default.PhotoCamera, tr("Take photo")) }
                 IconButton(onClick = {
                     pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                }) { Icon(Icons.Default.PhotoLibrary, "Choose photo") }
-                OutlinedTextField(input, { input = it }, Modifier.weight(1f).heightIn(max = 140.dp), placeholder = { Text("Message") })
-                if (streaming != null) IconButton(onClick = { job?.cancel() }) { Icon(Icons.Default.Stop, "Stop") }
-                else IconButton(onClick = { send(input) }, enabled = input.isNotBlank() || photo != null) { Icon(Icons.AutoMirrored.Filled.Send, "Send") }
+                }) { Icon(Icons.Default.PhotoLibrary, tr("Choose photo")) }
+                OutlinedTextField(input, { input = it }, Modifier.weight(1f).heightIn(max = 140.dp), placeholder = { Text(tr("Message")) })
+                if (streaming != null) IconButton(onClick = { job?.cancel() }) { Icon(Icons.Default.Stop, tr("Stop")) }
+                else IconButton(onClick = { send(input) }, enabled = input.isNotBlank() || photo != null) { Icon(Icons.AutoMirrored.Filled.Send, tr("Send")) }
             }
         }
     }
@@ -287,16 +289,16 @@ Be concise unless asked for detail. Answer in the language the student writes in
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (user) Text(text) else SelectionContainer { Text(text) }
                         if (!user) Row {
-                            Text("Write on page", Modifier.combinedClickable(onClick = onInsert).padding(top = 6.dp, end = 12.dp),
+                            Text(tr("Write on page"), Modifier.combinedClickable(onClick = onInsert).padding(top = 6.dp, end = 12.dp),
                                 color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-                            Text("Copy", Modifier.combinedClickable(onClick = onCopy).padding(top = 6.dp),
+                            Text(tr("Copy"), Modifier.combinedClickable(onClick = onCopy).padding(top = 6.dp),
                                 color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }
                 DropdownMenu(menu, { menu = false }) {
-                    DropdownMenuItem(text = { Text("Write on page") }, onClick = { onInsert(); menu = false })
-                    DropdownMenuItem(text = { Text("Copy") }, onClick = { onCopy(); menu = false })
+                    DropdownMenuItem(text = { Text(tr("Write on page")) }, onClick = { onInsert(); menu = false })
+                    DropdownMenuItem(text = { Text(tr("Copy")) }, onClick = { onCopy(); menu = false })
                 }
             }
         }

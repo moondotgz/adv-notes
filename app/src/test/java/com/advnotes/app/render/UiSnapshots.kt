@@ -327,6 +327,21 @@ class UiSnapshots {
         snap("36_top_bar_hidden")
     }
 
+    /** Switching the app language: settings and library in Brazilian Portuguese. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w1280dp-h800dp-land-xhdpi")
+    fun portuguese() {
+        val app = AdvNotesApp.instance
+        runBlocking { app.repo.save(Notebook(title = "Química", paper = PaperStyle.NARROW_GRID, cover = 0xFF0F8B6F.toInt())) }
+        com.advnotes.app.i18n.I18n.set("pt-BR")
+        rule.waitForIdle()
+        rule.onNodeWithText("Novo caderno", useUnmergedTree = true).assertExists()
+        snap("40_library_pt_BR")
+        rule.onNodeWithContentDescriptionCompat("Configurações")
+        snap("41_settings_pt_BR")
+        com.advnotes.app.i18n.I18n.set("")
+    }
+
     /** Regression: SHIFT legends pushed key labels out of the keys with big fonts. */
     @Test
     @Config(sdk = [34], qualifiers = "w411dp-h891dp-night-xxhdpi", fontScale = 1.3f)

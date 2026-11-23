@@ -1,5 +1,7 @@
 package com.advnotes.app.ui
 
+import com.advnotes.app.i18n.tr
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -55,7 +57,10 @@ import com.advnotes.app.data.ProviderType
 import com.advnotes.app.data.SettingsStore
 import kotlinx.coroutines.launch
 
-private enum class ModelSort(val label: String) { NEWEST("Newest"), CHEAPEST("Cheapest"), NAME("Name") }
+private enum class ModelSort(private val en: String) { NEWEST("Newest"), CHEAPEST("Cheapest"), NAME("Name") ;
+    /** Shown to the user, in the app language. */
+    val label: String get() = tr(en)
+}
 
 /**
  * Shows the chosen model (with its price on OpenRouter) and opens a searchable list loaded from
@@ -95,23 +100,23 @@ fun ModelPicker(p: ProviderType, st: SettingsStore) {
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Model", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr("Model"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(current?.name ?: model.ifBlank { "Choose a model" }, style = MaterialTheme.typography.titleMedium,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (current != null && current.name != current.id) Text(current.id, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 current?.let { ModelFacts(it) }
-                if (current?.vision == false) Text("This model can't read images, so it won't work for the solver or handwriting.",
+                if (current?.vision == false) Text(tr("This model can't read images, so it won't work for the solver or handwriting."),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
             if (loading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-            else Icon(Icons.Default.UnfoldMore, "Choose model")
+            else Icon(Icons.Default.UnfoldMore, tr("Choose model"))
         }
     }
     when {
         error != null -> Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         !canList && p != ProviderType.LOCAL -> Text(
-            if (p.needsBaseUrl) "Enter the base URL to load the model list." else "Add your API key to load the model list.",
+            if (p.needsBaseUrl) tr("Enter the base URL to load the model list.") else tr("Add your API key to load the model list."),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -176,7 +181,7 @@ private fun ModelDialog(
             Column(Modifier.padding(top = 20.dp)) {
                 Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Choose a model", style = MaterialTheme.typography.titleLarge)
+                        Text(tr("Choose a model"), style = MaterialTheme.typography.titleLarge)
                         Text(
                             buildString {
                                 append(provider.label)
@@ -185,23 +190,23 @@ private fun ModelDialog(
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = onReload) { Icon(Icons.Default.Refresh, "Reload list") }
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close") }
+                    IconButton(onClick = onReload) { Icon(Icons.Default.Refresh, tr("Reload list")) }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, tr("Close")) }
                 }
                 OutlinedTextField(
                     query, { query = it }, singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
                     leadingIcon = { Icon(Icons.Default.Search, null) },
-                    placeholder = { Text("Search, or type a model id") },
+                    placeholder = { Text(tr("Search, or type a model id")) },
                     shape = RoundedCornerShape(16.dp),
                 )
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (knowsVision) FilterChip(visionOnly, { visionOnly = !visionOnly }, label = { Text("Reads images") },
+                    if (knowsVision) FilterChip(visionOnly, { visionOnly = !visionOnly }, label = { Text(tr("Reads images")) },
                         leadingIcon = { Icon(Icons.Default.Image, null, Modifier.size(18.dp)) })
-                    if (knowsPrice) FilterChip(freeOnly, { freeOnly = !freeOnly }, label = { Text("Free") })
+                    if (knowsPrice) FilterChip(freeOnly, { freeOnly = !freeOnly }, label = { Text(tr("Free")) })
                     ModelSort.entries.filter { it != ModelSort.CHEAPEST || knowsPrice }.forEach { so ->
                         FilterChip(sort == so, { sort = so }, label = { Text(so.label) })
                     }
@@ -217,17 +222,17 @@ private fun ModelDialog(
                         if (models == null && loading) item {
                             Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                Spacer(Modifier.width(12.dp)); Text("Loading models…")
+                                Spacer(Modifier.width(12.dp)); Text(tr("Loading models…"))
                             }
                         }
                         if (models != null && shown.isEmpty()) item {
-                            Text("No models match.", Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(tr("No models match."), Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         items(shown, key = { it.id }) { m -> ModelRow(m, selected = m.id == current, onClick = { onPick(m.id) }) }
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) { Text("Done") }
+                    TextButton(onClick = onDismiss) { Text(tr("Done")) }
                 }
             }
         }
@@ -247,6 +252,6 @@ private fun ModelRow(m: ModelInfo, selected: Boolean, onClick: () -> Unit) {
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             ModelFacts(m)
         }
-        if (selected) Icon(Icons.Default.Check, "Selected", tint = MaterialTheme.colorScheme.primary)
+        if (selected) Icon(Icons.Default.Check, tr("Selected"), tint = MaterialTheme.colorScheme.primary)
     }
 }

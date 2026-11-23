@@ -1,5 +1,7 @@
 package com.advnotes.app.tools.calculator
 
+import com.advnotes.app.i18n.tr
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -87,21 +89,24 @@ import kotlinx.serialization.builtins.ListSerializer
  */
 object CalculatorTool : NotebookTool {
     override val id = "calculator"
-    override val name = "Scientific calculator"
-    override val description = "fx-991-style: exact fractions, √ and π, ∫, d/dx, Σ, constants, units, complex, base-N, equations, statistics"
+    override val name  get() = tr("Scientific calculator")
+    override val description  get() = tr("fx-991-style: exact fractions, √ and π, ∫, d/dx, Σ, constants, units, complex, base-N, equations, statistics")
     override val icon = Icons.Default.Calculate
 
     @Composable
     override fun Content(host: ToolHost) {
         if (!CasioEngine.available) {
-            Text("The calculator engine isn't included in this build.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
+            Text(tr("The calculator engine isn't included in this build."), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
             return
         }
         CalculatorScreen(host)
     }
 }
 
-private enum class Mode(val label: String) { CALC("Calculate"), COMPLEX("Complex"), BASE("Base-N"), EQUATION("Equation"), STATS("Statistics") }
+private enum class Mode(private val en: String) { CALC("Calculate"), COMPLEX("Complex"), BASE("Base-N"), EQUATION("Equation"), STATS("Statistics") ;
+    /** Shown to the user, in the app language. */
+    val label: String get() = tr(en)
+}
 
 @Serializable
 private data class HistoryEntry(
@@ -308,23 +313,23 @@ private fun CalcMode(
             } else {
                 val angle = listOf("Deg", "Rad", "Gra")[opts.angle]
                 OutlinedButton(onClick = { saveOpts(opts.copy(angle = (opts.angle + 1) % 3)) }) { Text(angle) }
-                OutlinedButton(onClick = { saveOpts(opts.copy(exact = !opts.exact)) }) { Text(if (opts.exact) "Math" else "Decimal") }
+                OutlinedButton(onClick = { saveOpts(opts.copy(exact = !opts.exact)) }) { Text(if (opts.exact) tr("Math") else tr("Decimal")) }
                 var fmtMenu by remember { mutableStateOf(false) }
                 Box {
                     OutlinedButton(onClick = { fmtMenu = true }) {
                         Text(when (opts.format) { 1 -> "Norm2"; 2 -> "Fix ${opts.digits}"; 3 -> "Sci ${if (opts.digits == 0) 10 else opts.digits}"; else -> "Norm1" })
                     }
                     DropdownMenu(fmtMenu, { fmtMenu = false }) {
-                        DropdownMenuItem(text = { Text("Norm1") }, onClick = { saveOpts(opts.copy(format = 0)); fmtMenu = false })
-                        DropdownMenuItem(text = { Text("Norm2") }, onClick = { saveOpts(opts.copy(format = 1)); fmtMenu = false })
-                        for (d in listOf(0, 2, 3, 4, 6)) DropdownMenuItem(text = { Text("Fix $d") }, onClick = { saveOpts(opts.copy(format = 2, digits = d)); fmtMenu = false })
-                        for (d in listOf(3, 4, 6, 0)) DropdownMenuItem(text = { Text("Sci ${if (d == 0) 10 else d}") }, onClick = { saveOpts(opts.copy(format = 3, digits = d)); fmtMenu = false })
+                        DropdownMenuItem(text = { Text(tr("Norm1")) }, onClick = { saveOpts(opts.copy(format = 0)); fmtMenu = false })
+                        DropdownMenuItem(text = { Text(tr("Norm2")) }, onClick = { saveOpts(opts.copy(format = 1)); fmtMenu = false })
+                        for (d in listOf(0, 2, 3, 4, 6)) DropdownMenuItem(text = { Text(tr("Fix {0}", d)) }, onClick = { saveOpts(opts.copy(format = 2, digits = d)); fmtMenu = false })
+                        for (d in listOf(3, 4, 6, 0)) DropdownMenuItem(text = { Text(tr("Sci {0}", if (d == 0) 10 else d)) }, onClick = { saveOpts(opts.copy(format = 3, digits = d)); fmtMenu = false })
                     }
                 }
                 if (mode == Mode.COMPLEX) OutlinedButton(onClick = { saveOpts(opts.copy(polar = !opts.polar)) }) { Text(if (opts.polar) "r∠θ" else "a+bi") }
                 OutlinedButton(onClick = { saveOpts(opts.copy(mixed = !opts.mixed)) }) { Text(if (opts.mixed) "a b/c" else "d/c") }
             }
-            TextButton(onClick = { history.clear(); persist() }) { Text("Clear history") }
+            TextButton(onClick = { history.clear(); persist() }) { Text(tr("Clear history")) }
         }
 
         // History
@@ -352,9 +357,9 @@ private fun CalcMode(
                         }
                     }
                     DropdownMenu(menu, { menu = false }) {
-                        DropdownMenuItem(text = { Text("Write on page") }, onClick = { host.insertText(entryText(e, isLast && showDecimal)); menu = false })
-                        DropdownMenuItem(text = { Text("Use result") }, onClick = { insert("(" + resultToInput(e.result) + ")"); menu = false })
-                        DropdownMenuItem(text = { Text("Delete") }, onClick = { history.removeAt(i); persist(); menu = false })
+                        DropdownMenuItem(text = { Text(tr("Write on page")) }, onClick = { host.insertText(entryText(e, isLast && showDecimal)); menu = false })
+                        DropdownMenuItem(text = { Text(tr("Use result")) }, onClick = { insert("(" + resultToInput(e.result) + ")"); menu = false })
+                        DropdownMenuItem(text = { Text(tr("Delete")) }, onClick = { history.removeAt(i); persist(); menu = false })
                     }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -378,7 +383,7 @@ private fun CalcMode(
                         modifier = Modifier.weight(1f).heightIn(min = 32.dp),
                     )
                     IconButton(onClick = { keypad = !keypad }, Modifier.size(40.dp)) {
-                        Icon(if (keypad) Icons.Default.Keyboard else Icons.Default.KeyboardHide, "Toggle keyboard", Modifier.size(20.dp))
+                        Icon(if (keypad) Icons.Default.Keyboard else Icons.Default.KeyboardHide, tr("Toggle keyboard"), Modifier.size(20.dp))
                     }
                 }
                 val hint = error ?: if (last != null && fresh && last.hasExact) "S⇔D shows the decimal" else null
@@ -571,7 +576,7 @@ private fun CatalogDialog(onDismiss: () -> Unit, onPick: (String) -> Unit) {
     )
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Close")) } },
         title = {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("Functions", "Constants", "Units").forEachIndexed { i, t -> FilterChip(tab == i, { tab = i }, label = { Text(t) }) }
@@ -651,32 +656,32 @@ private fun EquationMode(host: ToolHost, opts: CalcOptions) {
                 )
             }
         }
-        Text("Fields accept expressions too, e.g. 1/3, √(2), π.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(tr("Fields accept expressions too, e.g. 1/3, √(2), π."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(onClick = {
             error = null
             if (kind > 0) {
                 val c = (0..kind).map { parseNumber(fields[it], opts) }
-                if (c.any { it == null }) { error = "Check the coefficients"; return@Button }
+                if (c.any { it == null }) { error = tr("Check the coefficients"); return@Button }
                 val r = CasioEngine.polynomial(c.map { it!! }, opts)
-                result = if (r == null) { error = "a must not be 0"; emptyList() } else
+                result = if (r == null) { error = tr("a must not be 0"); emptyList() } else
                     r.first.mapIndexed { i, v -> "x${"₁₂₃₄"[i]} = $v" } +
                         (if (r.second.size == 2) listOf("vertex: (${r.second[0]}, ${r.second[1]})") else emptyList())
             } else {
                 val n = -kind
                 val a = ArrayList<Double>(); val b = ArrayList<Double>()
                 for (r in 0 until n) {
-                    for (c in 0 until n) a += parseNumber(fields[r * 5 + c], opts) ?: run { error = "Check the coefficients"; return@Button }
-                    b += parseNumber(fields[r * 5 + n], opts) ?: run { error = "Check the coefficients"; return@Button }
+                    for (c in 0 until n) a += parseNumber(fields[r * 5 + c], opts) ?: run { error = tr("Check the coefficients"); return@Button }
+                    b += parseNumber(fields[r * 5 + n], opts) ?: run { error = tr("Check the coefficients"); return@Button }
                 }
                 val r = CasioEngine.linear(n, a, b, opts)
                 result = when (r?.first) {
                     "unique" -> r.second.mapIndexed { i, v -> "${vars[i]} = $v" }
                     "none" -> listOf("No solution")
                     "infinite" -> listOf("Infinitely many solutions")
-                    else -> { error = "Couldn't solve"; emptyList() }
+                    else -> { error = tr("Couldn't solve"); emptyList() }
                 }
             }
-        }) { Text("Solve") }
+        }) { Text(tr("Solve")) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (result.isNotEmpty()) {
             Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
@@ -692,7 +697,7 @@ private fun EquationMode(host: ToolHost, opts: CalcOptions) {
                     (0 until -kind).joinToString(" + ") { c -> "(${fields[r * 5 + c].ifBlank { "0" }})${vars[c]}" } + " = ${fields[r * 5 - kind].ifBlank { "0" }}"
                 }
                 host.insertText(eq + "\n" + result.joinToString("\n"))
-            }) { Text("Write on page") }
+            }) { Text(tr("Write on page")) }
         }
     }
 }
@@ -725,17 +730,17 @@ private fun StatsMode(host: ToolHost, opts: CalcOptions) {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { xs += ""; ys += "" }) { Text("+ Row") }
-            OutlinedButton(onClick = { if (xs.size > 1) { xs.removeAt(xs.size - 1); ys.removeAt(ys.size - 1) } }) { Text("− Row") }
+            OutlinedButton(onClick = { xs += ""; ys += "" }) { Text(tr("+ Row")) }
+            OutlinedButton(onClick = { if (xs.size > 1) { xs.removeAt(xs.size - 1); ys.removeAt(ys.size - 1) } }) { Text(tr("− Row")) }
             Button(onClick = {
                 error = null
                 val rows = xs.indices.filter { xs[it].isNotBlank() }
                 val x = rows.map { parseNumber(xs[it], opts) }
                 val y = rows.map { parseNumber(ys[it], opts) }
-                if (x.any { it == null } || (type != 0 && y.any { it == null })) { error = "Check the data"; return@Button }
+                if (x.any { it == null } || (type != 0 && y.any { it == null })) { error = tr("Check the data"); return@Button }
                 CasioEngine.statistics(type, x.map { it!! }, if (type == 0) emptyList() else y.map { it!! }, opts)
                     .onSuccess { result = it }.onFailure { error = it.message; result = emptyList() }
-            }) { Text("Calculate") }
+            }) { Text(tr("Calculate")) }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (result.isNotEmpty()) {
@@ -750,7 +755,7 @@ private fun StatsMode(host: ToolHost, opts: CalcOptions) {
                 val key = if (type == 0) listOf("n", "x̄", "σx", "sx", "minX", "Q1", "Med", "Q3", "maxX") else listOf("n", "a", "b", "c", "r")
                 val lines = result.filter { it.first in key }.joinToString(", ") { "${it.first} = ${it.second}" }
                 host.insertText(CasioEngine.REGRESSIONS[type] + ": " + lines)
-            }) { Text("Write key results on page") }
+            }) { Text(tr("Write key results on page")) }
         }
     }
 }

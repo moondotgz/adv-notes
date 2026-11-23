@@ -2,6 +2,8 @@
 
 package com.advnotes.app.data
 
+import com.advnotes.app.i18n.tr
+
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
@@ -10,13 +12,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /** What the S Pen side button does while held. */
-enum class PenButtonAction(val label: String) { ERASER("Eraser"), LASSO("Lasso"), NONE("Nothing") }
+enum class PenButtonAction(private val en: String) { ERASER("Eraser"), LASSO("Lasso"), NONE("Nothing") ;
+    /** Shown to the user, in the app language. */
+    val label: String get() = tr(en)
+}
 
 /** How finger touches are treated. */
-enum class FingerMode(val label: String) {
+enum class FingerMode(private val en: String) {
     AUTO("Auto (draw until a pen is detected)"),
     NAVIGATE("Fingers only scroll & zoom"),
     DRAW("Fingers draw"),
+;
+    /** Shown to the user, in the app language. */
+    val label: String get() = tr(en)
 }
 
 enum class ProviderType(val label: String, val needsKey: Boolean, val needsBaseUrl: Boolean) {

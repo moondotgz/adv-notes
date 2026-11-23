@@ -1,5 +1,7 @@
 package com.advnotes.app.ink
 
+import com.advnotes.app.i18n.tr
+
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -10,9 +12,12 @@ import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-enum class ShapeKind(val label: String) {
+enum class ShapeKind(private val en: String) {
     LINE("Line"), ARROW("Arrow"), RECT("Rectangle"), ELLIPSE("Ellipse"), TRIANGLE("Triangle"),
     RIGHT_TRIANGLE("Right triangle"), DIAMOND("Diamond"), AXES("Axes"), LINE_CHART("Line chart"), POLYGON("Polygon"),
+;
+    /** Shown to the user, in the app language. */
+    val label: String get() = tr(en)
 }
 
 /** Builds point lists (x, y pairs) for geometric shapes. Each inner array is one stroke. */

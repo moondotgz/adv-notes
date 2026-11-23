@@ -1,5 +1,7 @@
 package com.advnotes.app.ai
 
+import com.advnotes.app.i18n.tr
+
 import android.util.Base64
 import com.advnotes.app.data.ProviderType
 import com.advnotes.app.data.SettingsStore
@@ -158,9 +160,9 @@ class OpenAiChatClient(
     private val official: Boolean,
 ) : AiClient {
     override suspend fun complete(req: VisionRequest, onText: (String) -> Unit): String {
-        if (baseUrl.isBlank()) throw AiException("Set a base URL for this provider in Settings.")
-        if (model.isBlank()) throw AiException("Set a model name for this provider in Settings.")
-        if (official && apiKey.isBlank()) throw AiException("Add your API key in Settings.")
+        if (baseUrl.isBlank()) throw AiException(tr("Set a base URL for this provider in Settings."))
+        if (model.isBlank()) throw AiException(tr("Set a model name for this provider in Settings."))
+        if (official && apiKey.isBlank()) throw AiException(tr("Add your API key in Settings."))
         val body = buildJsonObject {
             put("model", model)
             put("stream", true)
@@ -222,9 +224,9 @@ class AnthropicClient(
     }
 
     override suspend fun complete(req: VisionRequest, onText: (String) -> Unit): String {
-        if (baseUrl.isBlank()) throw AiException("Set a base URL for this provider in Settings.")
-        if (model.isBlank()) throw AiException("Set a model name for this provider in Settings.")
-        if (official && apiKey.isBlank()) throw AiException("Add your Anthropic API key in Settings.")
+        if (baseUrl.isBlank()) throw AiException(tr("Set a base URL for this provider in Settings."))
+        if (model.isBlank()) throw AiException(tr("Set a model name for this provider in Settings."))
+        if (official && apiKey.isBlank()) throw AiException(tr("Add your Anthropic API key in Settings."))
         val useFallbacks = official && FALLBACK_MODELS.any { model.startsWith(it) }
         val body = buildJsonObject {
             put("model", model)
@@ -273,7 +275,7 @@ class AnthropicClient(
                 "error" -> throw AiException(o["error"].obj()?.get("message").str() ?: data)
             }
         }
-        if (refused && out.isBlank()) throw AiException("The model declined to answer this request.")
+        if (refused && out.isBlank()) throw AiException(tr("The model declined to answer this request."))
         return out.toString()
     }
 }
@@ -289,7 +291,7 @@ class ChatGptCodexClient(private val auth: ChatGptAuth, private val model: Strin
     }
 
     override suspend fun complete(req: VisionRequest, onText: (String) -> Unit): String {
-        val token = auth.validAccessToken() ?: throw AiException("Sign in with ChatGPT in Settings first.")
+        val token = auth.validAccessToken() ?: throw AiException(tr("Sign in with ChatGPT in Settings first."))
         val account = auth.accountId()
         val body = buildJsonObject {
             put("model", model.ifBlank { "gpt-5" })

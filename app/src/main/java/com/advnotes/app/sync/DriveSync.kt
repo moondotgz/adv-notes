@@ -1,5 +1,7 @@
 package com.advnotes.app.sync
 
+import com.advnotes.app.i18n.tr
+
 import android.content.Context
 import com.advnotes.app.ai.AiException
 import com.advnotes.app.ai.Http
@@ -141,7 +143,7 @@ class DriveSync(
                     if (local.updatedAt > lastSynced && lastSynced != 0L) {
                         // Edited on both devices: keep the local edits as a separate copy.
                         repo.load(id)?.let { nb ->
-                            repo.save(nb.copy(id = newId(), title = nb.title + " (conflict copy)"), touch = false)
+                            repo.save(nb.copy(id = newId(), title = nb.title + tr(" (conflict copy)")), touch = false)
                         }
                     }
                     download(token, r.fileId)?.let { repo.save(it, touch = false); down++ }
@@ -181,7 +183,7 @@ class DriveSync(
         val r = Http.client.newCall(b.header("Authorization", "Bearer $token").build()).await()
         r.use {
             val body = it.body?.string().orEmpty()
-            if (!it.isSuccessful) throw AiException("Drive: " + errorMessage(it.code, body))
+            if (!it.isSuccessful) throw AiException(tr("Drive: ") + errorMessage(it.code, body))
             return body
         }
     }
@@ -237,8 +239,8 @@ class DriveSync(
     }
 
     private suspend fun upload(token: String, folder: String, id: String, existing: String?): String {
-        val nb = repo.load(id) ?: throw AiException("Notebook $id missing")
-        val json = repo.rawJson(id) ?: throw AiException("Notebook $id missing")
+        val nb = repo.load(id) ?: throw AiException(tr("Notebook {0} missing", id))
+        val json = repo.rawJson(id) ?: throw AiException(tr("Notebook {0} missing", id))
         val meta = buildJsonObject {
             put("name", "${nb.title.replace('/', '-')}.advnote.json")
             put("mimeType", "application/json")
@@ -297,7 +299,7 @@ class DriveSync(
             Request.Builder().url("$API/files/$fileId?alt=media").header("Authorization", "Bearer $token").build()
         ).await()
         r.use {
-            if (!it.isSuccessful) throw AiException("Drive: " + errorMessage(it.code, it.body?.string().orEmpty()))
+            if (!it.isSuccessful) throw AiException(tr("Drive: ") + errorMessage(it.code, it.body?.string().orEmpty()))
             dest.parentFile?.mkdirs()
             val tmp = java.io.File(dest.path + ".part")
             it.body!!.byteStream().use { input -> tmp.outputStream().use { o -> input.copyTo(o) } }

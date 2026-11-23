@@ -1,5 +1,7 @@
 package com.advnotes.app.tools.market
 
+import com.advnotes.app.i18n.tr
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -94,9 +96,9 @@ fun MarketplaceScreen(onBack: () -> Unit, onOpen: ((String) -> Unit)? = null) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Tool marketplace") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-                actions = { IconButton(onClick = { refresh++ }) { Icon(Icons.Default.Refresh, "Refresh") } },
+                title = { Text(tr("Tool marketplace")) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back")) } },
+                actions = { IconButton(onClick = { refresh++ }) { Icon(Icons.Default.Refresh, tr("Refresh")) } },
             )
         },
     ) { pad ->
@@ -108,11 +110,11 @@ fun MarketplaceScreen(onBack: () -> Unit, onOpen: ((String) -> Unit)? = null) {
                     Spacer(Modifier.size(12.dp))
                     Text(l.message, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                     Text(
-                        "Check your connection and try again. Tools come from github.com/${Marketplace.REPO}.",
+                        tr("Check your connection and try again. Tools come from github.com/{0}.", Marketplace.REPO),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.size(16.dp))
-                    FilledTonalButton(onClick = { refresh++ }) { Text("Try again") }
+                    FilledTonalButton(onClick = { refresh++ }) { Text(tr("Try again")) }
                 }
                 is Load.Ready -> {
                     val categories = l.index.tools.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
@@ -128,19 +130,19 @@ fun MarketplaceScreen(onBack: () -> Unit, onOpen: ((String) -> Unit)? = null) {
                         item {
                             TextField(
                                 query, { query = it }, Modifier.fillMaxWidth(),
-                                placeholder = { Text("Search tools") },
+                                placeholder = { Text(tr("Search tools")) },
                                 leadingIcon = { Icon(Icons.Default.Search, null) },
                                 singleLine = true, shape = RoundedCornerShape(28.dp),
                                 colors = TextFieldDefaults.colors(focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent),
                             )
                             if (categories.size > 1) Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(category == null, { category = null }, { Text("All") })
+                                FilterChip(category == null, { category = null }, { Text(tr("All")) })
                                 categories.forEach { c -> FilterChip(category == c, { category = if (category == c) null else c }, { Text(c) }) }
                             }
                         }
                         if (shown.isEmpty()) item {
                             Text(
-                                if (l.index.tools.isEmpty()) "No tools published yet." else "No tools match.",
+                                if (l.index.tools.isEmpty()) tr("No tools published yet.") else tr("No tools match."),
                                 Modifier.fillMaxWidth().padding(32.dp), textAlign = TextAlign.Center,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -163,7 +165,7 @@ fun MarketplaceScreen(onBack: () -> Unit, onOpen: ((String) -> Unit)? = null) {
                         }
                         item {
                             Text(
-                                "Tools are web pages that run in a sandbox next to your notes. Anyone can publish one: see github.com/${Marketplace.REPO}.",
+                                tr("Tools are web pages that run in a sandbox next to your notes. Anyone can publish one: see github.com/{0}.", Marketplace.REPO),
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(vertical = 8.dp),
                             )
@@ -209,13 +211,13 @@ private fun ToolCard(
             } else {
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
                     if (installed != null) {
-                        if (!update) Text("Installed", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                        else Text("Update: v$installed → v${e.version}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                        OutlinedButton(onClick = onRemove) { Text("Remove") }
-                        if (update) Button(onClick = onInstall) { Text("Update") }
-                        else if (onOpen != null) FilledTonalButton(onClick = onOpen) { Text("Open") }
+                        if (!update) Text(tr("Installed"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                        else Text(tr("Update: v{0} → v{1}", installed, e.version), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                        OutlinedButton(onClick = onRemove) { Text(tr("Remove")) }
+                        if (update) Button(onClick = onInstall) { Text(tr("Update")) }
+                        else if (onOpen != null) FilledTonalButton(onClick = onOpen) { Text(tr("Open")) }
                     } else {
-                        Button(onClick = onInstall) { Text("Install") }
+                        Button(onClick = onInstall) { Text(tr("Install")) }
                     }
                 }
             }

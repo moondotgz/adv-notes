@@ -1,5 +1,7 @@
 package com.advnotes.app.ui
 
+import com.advnotes.app.i18n.tr
+
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -33,6 +35,7 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Draw
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -113,8 +116,8 @@ fun SettingsScreen(onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             LargeTopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                title = { Text(tr("Settings")) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back")) } },
                 scrollBehavior = scroll,
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
@@ -130,45 +133,58 @@ fun SettingsScreen(onBack: () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            SettingsGroup("Pen & touch", Icons.Default.Draw) {
-                FieldLabel("Finger input", s.fingerMode.label)
+            SettingsGroup(tr("Language"), Icons.Default.Translate) {
+                val I = com.advnotes.app.i18n.I18n
+                val sys = java.util.Locale.getDefault().getDisplayName(java.util.Locale.getDefault())
+                RadioRow(tr("System default ({0})", sys), I.choice == "") { I.set("") }
+                I.available.forEach { lang ->
+                    RadioRow(if (lang.machineTranslated) lang.name + " · " + tr("machine-translated") else lang.name, I.choice == lang.tag) { I.set(lang.tag) }
+                }
+                if (I.active()?.machineTranslated == true) Text(
+                    tr("This translation was made by machine and may have mistakes. Corrections are welcome — see docs/TRANSLATING.md in the app's repository."),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            SettingsGroup(tr("Pen & touch"), Icons.Default.Draw) {
+                FieldLabel(tr("Finger input"), s.fingerMode.label)
                 Segmented(
-                    listOf(FingerMode.AUTO to "Auto", FingerMode.NAVIGATE to "Scroll only", FingerMode.DRAW to "Draw"),
+                    listOf(FingerMode.AUTO to tr("Auto"), FingerMode.NAVIGATE to tr("Scroll only"), FingerMode.DRAW to tr("Draw")),
                     s.fingerMode, { m -> app.settings.update { it.copy(fingerMode = m) } },
                 )
-                FieldLabel("S Pen side button", "What the pen does while you hold its button")
+                FieldLabel(tr("S Pen side button"), tr("What the pen does while you hold its button"))
                 Segmented(PenButtonAction.entries.map { it to it.label }, s.penButton, { a -> app.settings.update { it.copy(penButton = a) } })
-                FieldLabel("Pressure response", "Light: thick lines with little pressure. Firm: press harder for thick lines.")
+                FieldLabel(tr("Pressure response"), tr("Light: thick lines with little pressure. Firm: press harder for thick lines."))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Light", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(tr("Light"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Slider(
                         s.pressureCurve, { v -> app.settings.update { it.copy(pressureCurve = v) } },
                         valueRange = 0.4f..2.5f, modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
                     )
-                    Text("Firm", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(tr("Firm"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                SwitchRow("Hold to snap shapes", "Keep the pen still at the end of a stroke to turn it into a straight line or clean shape.", s.holdToShape) { v ->
+                SwitchRow(tr("Hold to snap shapes"), tr("Keep the pen still at the end of a stroke to turn it into a straight line or clean shape."), s.holdToShape) { v ->
                     app.settings.update { it.copy(holdToShape = v) }
                 }
             }
 
-            SettingsGroup("Layout", Icons.Default.Dashboard) {
-                FieldLabel("Toolbar position", "You can also drag the ⠿ handle on the toolbar to an edge.")
-                Segmented(listOf("TOP" to "Top", "BOTTOM" to "Bottom", "LEFT" to "Left", "RIGHT" to "Right"), s.toolbarDock,
+            SettingsGroup(tr("Layout"), Icons.Default.Dashboard) {
+                FieldLabel(tr("Toolbar position"), tr("You can also drag the ⠿ handle on the toolbar to an edge."))
+                Segmented(listOf("TOP" to tr("Top"), "BOTTOM" to tr("Bottom"), "LEFT" to tr("Left"), "RIGHT" to tr("Right")), s.toolbarDock,
                     { k -> app.settings.update { it.copy(toolbarDock = k) } })
-                FieldLabel("Tools panel on tablets")
-                Segmented(listOf("LEFT" to "Left side", "RIGHT" to "Right side"), s.panelSide, { k -> app.settings.update { it.copy(panelSide = k) } })
+                FieldLabel(tr("Tools panel on tablets"))
+                Segmented(listOf("LEFT" to tr("Left side"), "RIGHT" to tr("Right side")), s.panelSide, { k -> app.settings.update { it.copy(panelSide = k) } })
             }
 
             SettingsGroup("AI", Icons.Default.AutoAwesome) {
                 Text(
-                    "Used by Solve, To text and the AI chat. Lassoed handwriting is sent as an image to the provider you pick.",
+                    tr("Used by Solve, To text and the AI chat. Lassoed handwriting is sent as an image to the provider you pick."),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 ProviderType.entries.forEach { p ->
                     val unavailable = p == ProviderType.LOCAL && !BuildConfig.HAS_LLAMA
                     ChoiceRow(
-                        providerIcon(p), p.label, providerBlurb(p) + if (unavailable) " Not included in this build." else "",
+                        providerIcon(p), p.label, providerBlurb(p) + if (unavailable) tr(" Not included in this build.") else "",
                         selected = s.provider == p, enabled = !unavailable,
                     ) { app.settings.update { it.copy(provider = p) } }
                 }
@@ -181,11 +197,11 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             ToolsSection()
 
-            SettingsGroup("About", Icons.Default.Info) {
-                Text("Adv Notes ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyLarge)
+            SettingsGroup(tr("About"), Icons.Default.Info) {
+                Text(tr("Adv Notes {0}", BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "Notebooks are stored on this device. API keys and sign-in tokens are encrypted with the Android Keystore " +
-                        "and only sent to the provider you choose.",
+                    tr("Notebooks are stored on this device. API keys and sign-in tokens are encrypted with the Android Keystore ") +
+                        tr("and only sent to the provider you choose."),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 UpdateCheck()
@@ -255,7 +271,7 @@ private fun SecretField(label: String, initial: String, onChange: (String) -> Un
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         trailingIcon = {
             IconButton(onClick = { show = !show }) {
-                Icon(if (show) Icons.Default.VisibilityOff else Icons.Default.Visibility, if (show) "Hide" else "Show")
+                Icon(if (show) Icons.Default.VisibilityOff else Icons.Default.Visibility, if (show) tr("Hide") else tr("Show"))
             }
         },
     )
@@ -276,7 +292,7 @@ private fun ProviderConfig(p: ProviderType) {
             var base by remember { mutableStateOf(st.baseUrl(p)) }
             OutlinedTextField(
                 base, { base = it; st.setBaseUrl(p, it) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                label = { Text("Base URL") },
+                label = { Text(tr("Base URL")) },
                 placeholder = {
                     Text(if (p == ProviderType.CUSTOM_OPENAI) "https://host/v1  (e.g. http://192.168.1.5:8080/v1)" else "https://host  (…/v1/messages is added)")
                 },
@@ -284,7 +300,7 @@ private fun ProviderConfig(p: ProviderType) {
             )
         }
         if (p.needsKey || p.needsBaseUrl) {
-            SecretField(if (p.needsBaseUrl) "API key (optional)" else "API key", st.apiKey(p)) { st.setApiKey(p, it) }
+            SecretField(if (p.needsBaseUrl) tr("API key (optional)") else tr("API key"), st.apiKey(p)) { st.setApiKey(p, it) }
         }
         if (p != ProviderType.LOCAL) ModelPicker(p, st)
         val note = when (p) {
@@ -313,14 +329,14 @@ private fun ChatGptConfig() {
 
     if (signedIn) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Signed in" + (auth.email()?.let { " as $it" } ?: ""), Modifier.weight(1f))
-            TextButton(onClick = { auth.signOut(); signedIn = false }) { Text("Sign out") }
+            Text(tr("Signed in") + (auth.email()?.let { " as $it" } ?: ""), Modifier.weight(1f))
+            TextButton(onClick = { auth.signOut(); signedIn = false }) { Text(tr("Sign out")) }
         }
     } else if (waiting != null) {
-        Text("Finish signing in in your browser…")
+        Text(tr("Finish signing in in your browser…"))
         LinearProgressIndicator(Modifier.fillMaxWidth())
         Text(
-            "If the browser shows “can't reach this page” after signing in, copy the address from the address bar and paste it here:",
+            tr("If the browser shows “can't reach this page” after signing in, copy the address from the address bar and paste it here:"),
             style = MaterialTheme.typography.bodySmall,
         )
         OutlinedTextField(pasted, { pasted = it }, label = { Text("http://localhost:1455/auth/callback?code=…") }, modifier = Modifier.fillMaxWidth())
@@ -330,8 +346,8 @@ private fun ChatGptConfig() {
                     try { auth.completeFromUrl(pasted); signedIn = true; waiting?.cancel(); waiting = null }
                     catch (e: Exception) { error = e.message }
                 }
-            }) { Text("Use pasted URL") }
-            OutlinedButton(onClick = { auth.cancel(); waiting?.cancel(); waiting = null }) { Text("Cancel") }
+            }) { Text(tr("Use pasted URL")) }
+            OutlinedButton(onClick = { auth.cancel(); waiting?.cancel(); waiting = null }) { Text(tr("Cancel")) }
         }
     } else {
         Button(onClick = {
@@ -340,7 +356,7 @@ private fun ChatGptConfig() {
                 try { auth.signIn(ctx); signedIn = true } catch (e: Exception) { if (e !is kotlinx.coroutines.CancellationException) error = e.message }
                 waiting = null
             }
-        }) { Text("Sign in with ChatGPT") }
+        }) { Text(tr("Sign in with ChatGPT")) }
     }
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 }
@@ -357,11 +373,11 @@ private fun LocalModelsConfig() {
     var confirmDelete by remember { mutableStateOf<com.advnotes.app.ai.LocalModel?>(null) }
 
     if (!LlamaBridge.available) {
-        Text("The on-device runner isn't available in this build.", color = MaterialTheme.colorScheme.error)
+        Text(tr("The on-device runner isn't available in this build."), color = MaterialTheme.colorScheme.error)
         return
     }
-    Text("Installed models", style = MaterialTheme.typography.labelLarge)
-    if (models.isEmpty()) Text("None yet — download one below or import GGUF files.", style = MaterialTheme.typography.bodySmall)
+    Text(tr("Installed models"), style = MaterialTheme.typography.labelLarge)
+    if (models.isEmpty()) Text(tr("None yet — download one below or import GGUF files."), style = MaterialTheme.typography.bodySmall)
     models.forEach { m ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             RadioButton(s.localModel == m.name, { app.settings.update { it.copy(localModel = m.name) } }, enabled = m.ready)
@@ -372,7 +388,7 @@ private fun LocalModelsConfig() {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(onClick = { confirmDelete = m }) { Icon(Icons.Default.Delete, "Delete") }
+            IconButton(onClick = { confirmDelete = m }) { Icon(Icons.Default.Delete, tr("Delete")) }
         }
     }
     // downloads in progress (or failed) for models that aren't installed yet
@@ -388,7 +404,7 @@ private fun LocalModelsConfig() {
                     is DownloadState.Failed -> Text(d.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            TextButton(onClick = { app.downloads.cancel(name) }) { Text(if (d is DownloadState.Running) "Cancel" else "Dismiss") }
+            TextButton(onClick = { app.downloads.cancel(name) }) { Text(if (d is DownloadState.Running) tr("Cancel") else tr("Dismiss")) }
         }
     }
     Spacer(Modifier.height(8.dp))
@@ -397,7 +413,7 @@ private fun LocalModelsConfig() {
     ImportModel()
     Spacer(Modifier.height(8.dp))
     LocalLogs()
-    Text("CPU threads: ${s.localThreads}")
+    Text(tr("CPU threads: {0}", s.localThreads))
     Slider(
         s.localThreads.toFloat(), { v -> app.settings.update { it.copy(localThreads = v.toInt()) } },
         valueRange = 1f..8f, steps = 6,
@@ -405,7 +421,7 @@ private fun LocalModelsConfig() {
     confirmDelete?.let { m ->
         AlertDialog(
             onDismissRequest = { confirmDelete = null },
-            title = { Text("Delete ${m.name}?") },
+            title = { Text(tr("Delete {0}?", m.name)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = null
@@ -414,9 +430,9 @@ private fun LocalModelsConfig() {
                         if (s.localModel == m.name) app.settings.update { it.copy(localModel = null) }
                         refresh++
                     }
-                }) { Text("Delete") }
+                }) { Text(tr("Delete")) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(tr("Cancel")) } },
         )
     }
 }
@@ -430,26 +446,26 @@ private fun ImportModel() {
     var mmproj by remember { mutableStateOf<Uri?>(null) }
     val pickModel = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { model = it }
     val pickProj = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { mmproj = it }
-    OutlinedButton(onClick = { open = true }) { Text("Import GGUF files…") }
+    OutlinedButton(onClick = { open = true }) { Text(tr("Import GGUF files…")) }
     if (open) {
         AlertDialog(
             onDismissRequest = { open = false },
-            title = { Text("Import a vision model") },
+            title = { Text(tr("Import a vision model")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("You need two files: the model GGUF and its matching mmproj (vision projector) GGUF.", style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
-                    OutlinedButton(onClick = { pickModel.launch(arrayOf("*/*")) }) { Text(if (model == null) "Choose model .gguf" else "Model ✓") }
-                    OutlinedButton(onClick = { pickProj.launch(arrayOf("*/*")) }) { Text(if (mmproj == null) "Choose mmproj .gguf" else "Projector ✓") }
+                    Text(tr("You need two files: the model GGUF and its matching mmproj (vision projector) GGUF."), style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(name, { name = it }, label = { Text(tr("Name")) }, singleLine = true)
+                    OutlinedButton(onClick = { pickModel.launch(arrayOf("*/*")) }) { Text(if (model == null) tr("Choose model .gguf") else tr("Model ✓")) }
+                    OutlinedButton(onClick = { pickProj.launch(arrayOf("*/*")) }) { Text(if (mmproj == null) tr("Choose mmproj .gguf") else tr("Projector ✓")) }
                 }
             },
             confirmButton = {
                 TextButton(enabled = name.isNotBlank() && model != null && mmproj != null, onClick = {
                     app.downloads.import(name.trim(), model!!, mmproj!!)
                     open = false; name = ""; model = null; mmproj = null
-                }) { Text("Import") }
+                }) { Text(tr("Import")) }
             },
-            dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { open = false }) { Text(tr("Cancel")) } },
         )
     }
 }
@@ -478,7 +494,7 @@ private fun TestButton(p: ProviderType) {
                 }
                 running = false
             }
-        }) { Text("Test connection") }
+        }) { Text(tr("Test connection")) }
         if (running) { Spacer(Modifier.width(12.dp)); CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }
     }
     result?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -493,17 +509,17 @@ private fun DriveSection() {
     val scope = rememberCoroutineScope()
     val connect = rememberDriveAuthLauncher { ok -> if (ok) scope.launch { app.drive.sync() } }
 
-    Section("Google Drive backup & sync") {
+    Section(tr("Google Drive backup & sync")) {
         if (s.driveAccount == null) {
             Text(
-                "Back up notebooks to an “Adv Notes” folder in your Google Drive and keep them in sync across devices. " +
-                    "The app can only see files it creates.",
+                tr("Back up notebooks to an “Adv Notes” folder in your Google Drive and keep them in sync across devices. ") +
+                    tr("The app can only see files it creates."),
                 style = MaterialTheme.typography.bodySmall,
             )
             Spacer(Modifier.height(4.dp))
-            Button(onClick = connect) { Text("Connect Google Drive") }
+            Button(onClick = connect) { Text(tr("Connect Google Drive")) }
         } else {
-            Text("Connected: ${s.driveAccount}")
+            Text(tr("Connected: {0}", s.driveAccount))
             Text(
                 when (val st = status) {
                     SyncStatus.Idle -> "Not synced yet in this session"
@@ -515,14 +531,14 @@ private fun DriveSection() {
                 style = MaterialTheme.typography.bodySmall,
                 color = if (status is SyncStatus.Error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            SwitchRow("Sync automatically", "Hourly in the background and after you close a notebook.", s.autoSync) { v ->
+            SwitchRow(tr("Sync automatically"), tr("Hourly in the background and after you close a notebook."), s.autoSync) { v ->
                 app.settings.update { it.copy(autoSync = v) }
                 SyncWorker.schedule(ctx, v)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = status != SyncStatus.Running, onClick = { scope.launch { app.drive.sync() } }) { Text("Sync now") }
-                if (status == SyncStatus.NeedsSignIn) OutlinedButton(onClick = connect) { Text("Reconnect") }
-                TextButton(onClick = { scope.launch { app.drive.disconnect() } }) { Text("Disconnect") }
+                Button(enabled = status != SyncStatus.Running, onClick = { scope.launch { app.drive.sync() } }) { Text(tr("Sync now")) }
+                if (status == SyncStatus.NeedsSignIn) OutlinedButton(onClick = connect) { Text(tr("Reconnect")) }
+                TextButton(onClick = { scope.launch { app.drive.disconnect() } }) { Text(tr("Disconnect")) }
             }
         }
     }
@@ -541,10 +557,10 @@ private fun ToolsSection() {
     }
     var market by remember { mutableStateOf(false) }
     if (market) com.advnotes.app.tools.market.MarketplaceDialog(onDismiss = { market = false })
-    Section("Tools") {
+    Section(tr("Tools")) {
         Text(
-            "Tools open in the side panel next to a notebook (the ▦ button in the editor). Get more from the marketplace, " +
-                "or install your own .zip: see docs/TOOLS.md to build or port one.",
+            tr("Tools open in the side panel next to a notebook (the ▦ button in the editor). Get more from the marketplace, ") +
+                tr("or install your own .zip: see docs/TOOLS.md to build or port one."),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         tools.forEach { t ->
@@ -563,13 +579,13 @@ private fun ToolsSection() {
                     )
                 }
                 if (t is com.advnotes.app.tools.WebTool && t.installed) {
-                    IconButton(onClick = { app.tools.uninstall(t.id) }) { Icon(Icons.Default.Delete, "Uninstall") }
+                    IconButton(onClick = { app.tools.uninstall(t.id) }) { Icon(Icons.Default.Delete, tr("Uninstall")) }
                 }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { market = true }) { Text("Browse marketplace") }
-            OutlinedButton(onClick = { pick.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }) { Text("Install from .zip…") }
+            Button(onClick = { market = true }) { Text(tr("Browse marketplace")) }
+            OutlinedButton(onClick = { pick.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }) { Text(tr("Install from .zip…")) }
         }
         message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
@@ -602,24 +618,24 @@ private fun HuggingFaceSearch() {
         if (query.isNotBlank()) { kotlinx.coroutines.delay(500); search() }
     }
 
-    Text("Find a model on Hugging Face", style = MaterialTheme.typography.labelLarge)
+    Text(tr("Find a model on Hugging Face"), style = MaterialTheme.typography.labelLarge)
     Text(
-        "The solver needs a vision model: a GGUF repo that also has an mmproj (vision projector) file. " +
-            "Small models (1–4B parameters, Q4) run best on phones.",
+        tr("The solver needs a vision model: a GGUF repo that also has an mmproj (vision projector) file. ") +
+            tr("Small models (1–4B parameters, Q4) run best on phones."),
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     OutlinedTextField(
         query, { query = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-        placeholder = { Text("e.g. qwen vl, gemma, smolvlm, minicpm") },
+        placeholder = { Text(tr("e.g. qwen vl, gemma, smolvlm, minicpm")) },
         trailingIcon = {
             if (loading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-            else IconButton(onClick = { search() }) { Icon(Icons.Default.Refresh, "Search") }
+            else IconButton(onClick = { search() }) { Icon(Icons.Default.Refresh, tr("Search")) }
         },
     )
-    Text(if (query.isBlank()) "Trending vision models" else "Most downloaded GGUF models for “${query.trim()}”",
+    Text(if (query.isBlank()) tr("Trending vision models") else tr("Most downloaded GGUF models for “{0}”", query.trim()),
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-    if (!loading && error == null && results.isEmpty()) Text("No GGUF models found.", style = MaterialTheme.typography.bodySmall)
+    if (!loading && error == null && results.isEmpty()) Text(tr("No GGUF models found."), style = MaterialTheme.typography.bodySmall)
     (if (showAll) results else results.take(8)).forEach { r ->
         Row(
             Modifier.fillMaxWidth().selectable(false, onClick = { picked = r.id }).padding(vertical = 6.dp),
@@ -633,11 +649,11 @@ private fun HuggingFaceSearch() {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Icon(Icons.Default.Download, "Choose files")
+            Icon(Icons.Default.Download, tr("Choose files"))
         }
     }
-    if (!showAll && results.size > 8) TextButton(onClick = { showAll = true }) { Text("Show ${results.size - 8} more") }
-    SecretField("Hugging Face token (only for gated models, e.g. Gemma)", token ?: "") { app.settings.setSecret("hf_token", it.ifBlank { null }) }
+    if (!showAll && results.size > 8) TextButton(onClick = { showAll = true }) { Text(tr("Show {0} more", results.size - 8)) }
+    SecretField(tr("Hugging Face token (only for gated models, e.g. Gemma)"), token ?: "") { app.settings.setSecret("hf_token", it.ifBlank { null }) }
 
     picked?.let { repo -> ModelFilesDialog(repo, onDismiss = { picked = null }) }
 }
@@ -684,29 +700,29 @@ private fun ModelFilesDialog(repo: String, onDismiss: () -> Unit) {
                 when {
                     error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
                     f == null -> LinearProgressIndicator(Modifier.fillMaxWidth())
-                    f.models.isEmpty() -> Text("No GGUF model files in this repository.")
+                    f.models.isEmpty() -> Text(tr("No GGUF model files in this repository."))
                     else -> {
                         if (f.projectors.isEmpty()) Text(
-                            "This repository has no mmproj (vision projector) file, so the model can't read your handwriting. " +
-                                "Look for another upload of the same model (ggml-org, unsloth and bartowski usually include one).",
+                            tr("This repository has no mmproj (vision projector) file, so the model can't read your handwriting. ") +
+                                tr("Look for another upload of the same model (ggml-org, unsloth and bartowski usually include one)."),
                             color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
                         )
-                        Text("Model file", style = MaterialTheme.typography.labelLarge)
+                        Text(tr("Model file"), style = MaterialTheme.typography.labelLarge)
                         f.models.forEach { m ->
-                            RadioRow("${m.quant.ifEmpty { m.name }} · ${gb(m.size)}" + if (m.isSplit) " · split, not supported" else "",
+                            RadioRow("${m.quant.ifEmpty { m.name }} · ${gb(m.size)}" + if (m.isSplit) tr(" · split, not supported") else "",
                                 model == m, enabled = !m.isSplit) { model = m }
                         }
                         if (f.projectors.isNotEmpty()) {
-                            Text("Vision projector", style = MaterialTheme.typography.labelLarge)
+                            Text(tr("Vision projector"), style = MaterialTheme.typography.labelLarge)
                             f.projectors.forEach { p -> RadioRow("${p.quant.ifEmpty { p.name }} · ${gb(p.size)}", proj == p) { proj = p } }
                         }
                         val total = (model?.size ?: 0) + (proj?.size ?: 0)
-                        Text("Download: ${gb(total)}" + if (ramBytes > 0) " · this device has ${gb(ramBytes)} RAM" else "", style = MaterialTheme.typography.bodySmall)
+                        Text(tr("Download: {0}", gb(total)) + if (ramBytes > 0) tr(" · this device has {0} RAM", gb(ramBytes)) else "", style = MaterialTheme.typography.bodySmall)
                         if (ramBytes > 0 && total > ramBytes * 0.6) Text(
-                            "Probably too big for this device: the model must fit in memory. Pick a smaller quantisation or model.",
+                            tr("Probably too big for this device: the model must fit in memory. Pick a smaller quantisation or model."),
                             color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
                         )
-                        OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(name, { name = it }, label = { Text(tr("Name")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
@@ -723,9 +739,9 @@ private fun ModelFilesDialog(repo: String, onDismiss: () -> Unit) {
                     )
                     onDismiss()
                 },
-            ) { Text("Download") }
+            ) { Text(tr("Download")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel")) } },
     )
 }
 
@@ -737,7 +753,7 @@ private fun UpdateCheck() {
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
     var found by remember { mutableStateOf<com.advnotes.app.update.Update?>(null) }
-    SwitchRow("Check for updates", "Looks for a new release on GitHub when the library opens.", s.checkUpdates) { v ->
+    SwitchRow(tr("Check for updates"), tr("Looks for a new release on GitHub when the library opens."), s.checkUpdates) { v ->
         app.settings.update { it.copy(checkUpdates = v) }
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -746,15 +762,15 @@ private fun UpdateCheck() {
             scope.launch {
                 try {
                     val u = com.advnotes.app.update.Updater.check()
-                    if (u == null) msg = "You're up to date." else found = u
+                    if (u == null) msg = tr("You're up to date.") else found = u
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    msg = "Couldn't check: ${e.message}"
+                    msg = tr("Couldn't check: {0}", e.message)
                 }
                 busy = false
             }
-        }) { Text("Check now") }
+        }) { Text(tr("Check now")) }
         msg?.let { Spacer(Modifier.width(12.dp)); Text(it, style = MaterialTheme.typography.bodySmall) }
     }
     found?.let { UpdateDialog(it) { found = null } }
@@ -774,8 +790,8 @@ private fun LocalLogs() {
         OutlinedButton(enabled = !busy, onClick = {
             busy = true; result = null
             scope.launch { result = app.local.testLoad(); busy = false }
-        }) { Text("Test load") }
-        OutlinedButton(onClick = { show = true }) { Text("View logs") }
+        }) { Text(tr("Test load")) }
+        OutlinedButton(onClick = { show = true }) { Text(tr("View logs")) }
         if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
     }
     result?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -785,7 +801,7 @@ private fun LocalLogs() {
         LaunchedEffect(version) { scroll.scrollTo(scroll.maxValue) }
         AlertDialog(
             onDismissRequest = { show = false },
-            title = { Text("On-device model log") },
+            title = { Text(tr("On-device model log")) },
             text = {
                 Box(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(scroll)) {
                     androidx.compose.foundation.text.selection.SelectionContainer {
@@ -796,10 +812,10 @@ private fun LocalLogs() {
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { show = false }) { Text("Close") } },
+            confirmButton = { TextButton(onClick = { show = false }) { Text(tr("Close")) } },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(text)) }) { Text("Copy") }
+                    TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(text)) }) { Text(tr("Copy")) }
                     TextButton(onClick = { com.advnotes.app.ai.LlamaLog.clear() }) { Text("Clear") }
                 }
             },

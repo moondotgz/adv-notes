@@ -1,5 +1,7 @@
 package com.advnotes.app.tools
 
+import com.advnotes.app.i18n.tr
+
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -87,13 +89,13 @@ fun ToolPanel(
                             Icon(t.icon, t.name)
                         }
                     }
-                    IconButton(onClick = onPicker) { Icon(Icons.Default.Add, "Open a tool") }
+                    IconButton(onClick = onPicker) { Icon(Icons.Default.Add, tr("Open a tool")) }
                     state.active?.let { id -> tools.firstOrNull { it.id == id } }?.let { t ->
-                        if (t is WebTool) IconButton(onClick = { logFor = t.id }) { Icon(Icons.Default.BugReport, "Tool log") }
-                        IconButton(onClick = { onCloseTool(t.id) }) { Icon(Icons.Default.Close, "Close ${t.name}") }
+                        if (t is WebTool) IconButton(onClick = { logFor = t.id }) { Icon(Icons.Default.BugReport, tr("Tool log")) }
+                        IconButton(onClick = { onCloseTool(t.id) }) { Icon(Icons.Default.Close, tr("Close {0}", t.name)) }
                     }
                 }
-                IconButton(onClick = onHide, Modifier.align(Alignment.CenterEnd)) { Icon(Icons.Default.KeyboardArrowDown, "Hide panel") }
+                IconButton(onClick = onHide, Modifier.align(Alignment.CenterEnd)) { Icon(Icons.Default.KeyboardArrowDown, tr("Hide panel")) }
             }
             HorizontalDivider()
             Box(Modifier.weight(1f).fillMaxWidth().imePadding().clipToBounds()) {
@@ -123,9 +125,9 @@ private fun ToolPicker(tools: List<NotebookTool>, onOpen: (String) -> Unit) {
     if (market) com.advnotes.app.tools.market.MarketplaceDialog(onDismiss = { market = false }, onOpen = onOpen)
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         item {
-            Text("Tools", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp))
+            Text(tr("Tools"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp))
             Text(
-                "Little apps that sit next to your notes.",
+                tr("Little apps that sit next to your notes."),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
@@ -141,8 +143,8 @@ private fun ToolPicker(tools: List<NotebookTool>, onOpen: (String) -> Unit) {
         }
         item {
             ListItem(
-                headlineContent = { Text("Get more tools") },
-                supportingContent = { Text("PDF reader and more from the marketplace") },
+                headlineContent = { Text(tr("Get more tools")) },
+                supportingContent = { Text(tr("PDF reader and more from the marketplace")) },
                 leadingContent = { Icon(androidx.compose.material.icons.Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary) },
                 modifier = Modifier.clickable { market = true },
             )
@@ -160,7 +162,7 @@ private fun ToolLogDialog(toolId: String, onDismiss: () -> Unit) {
     androidx.compose.runtime.LaunchedEffect(version) { scroll.scrollTo(scroll.maxValue) }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Tool log") },
+        title = { Text(tr("Tool log")) },
         text = {
             Box(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(scroll)) {
                 androidx.compose.foundation.text.selection.SelectionContainer {
@@ -171,10 +173,10 @@ private fun ToolLogDialog(toolId: String, onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Close")) } },
         dismissButton = {
             Row {
-                TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(text)) }) { Text("Copy") }
+                TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(text)) }) { Text(tr("Copy")) }
                 TextButton(onClick = { ToolLog.clear(toolId) }) { Text("Clear") }
             }
         },

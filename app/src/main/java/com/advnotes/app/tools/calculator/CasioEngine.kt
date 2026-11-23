@@ -1,5 +1,7 @@
 package com.advnotes.app.tools.calculator
 
+import com.advnotes.app.i18n.tr
+
 import com.advnotes.app.ai.Http
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
