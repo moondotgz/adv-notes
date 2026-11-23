@@ -28,6 +28,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Translations up to date
         run: python3 scripts/i18n.py --check
+      - name: Fetch Robolectric's Android jar (cached by Gradle; Maven Central sometimes rate-limits)
+        run: ./gradlew :app:robolectricJars || { echo "Retrying in 60 s"; sleep 60; ./gradlew :app:robolectricJars; }
       - name: Unit tests
         # Robolectric downloads its Android jars from Maven during the first test; that download
         # sometimes fails on the runner, so retry once before treating it as a real failure.

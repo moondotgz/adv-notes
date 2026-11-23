@@ -121,8 +121,21 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
+// Robolectric's Android framework jar comes through Gradle (cached, with Gradle's own retries) instead of
+// being downloaded by Robolectric during the tests, which kept failing on CI. Tests run with @Config(sdk = [34]).
+val robolectricRuntime: Configuration by configurations.creating
+dependencies {
+    robolectricRuntime("org.robolectric:android-all-instrumented:14-robolectric-10818077-i7")
+}
+val robolectricJars = tasks.register<Sync>("robolectricJars") {
+    from(robolectricRuntime)
+    into(layout.buildDirectory.dir("robolectric-jars"))
+}
+
 tasks.withType<Test>().configureEach {
-    systemProperty("robolectric.dependency.repo.url", "https://repo1.maven.org/maven2")
+    dependsOn(robolectricJars)
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.dependency.dir", layout.buildDirectory.dir("robolectric-jars").get().asFile.absolutePath)
 }
 
 // Builds the calculator engine for the host so JVM (Robolectric) tests exercise the real C++ code
