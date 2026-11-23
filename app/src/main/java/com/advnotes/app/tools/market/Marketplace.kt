@@ -60,7 +60,24 @@ object Marketplace {
 
     private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
-    private fun url(rel: String) = baseUrl.trimEnd('/') + "/" + rel.trimStart('/').split('/').joinToString("/") {
+    /**
+     * The real store pinned to its latest commit (raw.githubusercontent.com/<repo>/<sha>/). The plain
+     * …/main/ address sits in GitHub's CDN for minutes and ignores client cache headers and query strings,
+     * so a new tool could stay invisible; a commit address is always current, and downloads then come
+     * from the same commit as the index they were listed in.
+     */
+    @Volatile private var pinnedBase: String? = null
+
+    private suspend fun latestCommitBase(): String? = runCatching {
+        val req = Request.Builder().url("https://api.github.com/repos/$REPO/commits/main")
+            .header("Accept", "application/vnd.github.sha").build()
+        Http.client.newCall(req).await().use { r ->
+            val sha = r.body?.string()?.trim().orEmpty()
+            if (r.isSuccessful && Regex("[0-9a-f]{40}").matches(sha)) "https://raw.githubusercontent.com/$REPO/$sha/" else null
+        }
+    }.getOrNull()
+
+    private fun url(rel: String) = (pinnedBase ?: baseUrl).trimEnd('/') + "/" + rel.trimStart('/').split('/').joinToString("/") {
         java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20")
     }
 
@@ -68,6 +85,7 @@ object Marketplace {
 
     suspend fun index(force: Boolean = false): Index {
         cache?.let { (t, i) -> if (!force && System.currentTimeMillis() - t < 10 * 60_000) return i }
+        pinnedBase = if (baseUrl == DEFAULT_BASE) latestCommitBase() else null   // falls back to …/main/ if the API is unreachable
         val req = Request.Builder().url(url("index.json")).header("Cache-Control", "no-cache").build()
         val body = Http.client.newCall(req).await().use { r ->
             if (r.code == 404) throw AiException(tr("The tool marketplace isn't available yet."))

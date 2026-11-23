@@ -88,7 +88,7 @@ fun MarketplaceScreen(onBack: () -> Unit, onOpen: ((String) -> Unit)? = null) {
 
     LaunchedEffect(refresh) {
         load = Load.Loading
-        load = try { Load.Ready(Marketplace.index(force = refresh > 0)) } catch (e: Exception) { Load.Failed(e.message ?: "Couldn't load the marketplace") }
+        load = try { Load.Ready(Marketplace.index(force = true)) } catch (e: Exception) { Load.Failed(e.message ?: "Couldn't load the marketplace") }
     }
 
     fun installed(id: String) = (tools.firstOrNull { it.id == id } as? WebTool)?.takeIf { it.installed }?.manifest?.version
@@ -120,7 +120,7 @@ fun MarketplaceScreen(onBack: () -> Unit, onOpen: ((String) -> Unit)? = null) {
                     val categories = l.index.tools.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
                     val shown = l.index.tools.filter { e ->
                         (category == null || e.category == category) &&
-                            (query.isBlank() || listOf(e.name, e.description, e.localName, e.localDescription, e.author, e.category).any { it.contains(query.trim(), ignoreCase = true) })
+                            (query.isBlank() || listOf(e.name, e.description, e.localName, e.localDescription, e.author, e.category, categoryLabel(e.category)).any { it.contains(query.trim(), ignoreCase = true) })
                     }
                     LazyColumn(
                         Modifier.fillMaxSize().widthIn(max = 760.dp),
@@ -137,7 +137,7 @@ fun MarketplaceScreen(onBack: () -> Unit, onOpen: ((String) -> Unit)? = null) {
                             )
                             if (categories.size > 1) Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 FilterChip(category == null, { category = null }, { Text(tr("All")) })
-                                categories.forEach { c -> FilterChip(category == c, { category = if (category == c) null else c }, { Text(c) }) }
+                                categories.forEach { c -> FilterChip(category == c, { category = if (category == c) null else c }, { Text(categoryLabel(c)) }) }
                             }
                         }
                         if (shown.isEmpty()) item {
@@ -200,7 +200,7 @@ private fun ToolCard(
                 Column(Modifier.weight(1f)) {
                     Text(e.localName, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        listOfNotNull(e.author.ifBlank { null }, "v${e.version}", Marketplace.sizeLabel(e.size), e.category.ifBlank { null }).joinToString(" · "),
+                        listOfNotNull(e.author.ifBlank { null }, "v${e.version}", Marketplace.sizeLabel(e.size), e.category.ifBlank { null }?.let { categoryLabel(it) }).joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -224,4 +224,14 @@ private fun ToolCard(
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp)) }
         }
     }
+}
+
+/** Store categories in the app language; unknown ones are shown as published. */
+private fun categoryLabel(c: String): String = when (c) {
+    "Study" -> tr("Study")
+    "Fun" -> tr("Fun")
+    "Reading" -> tr("Reading")
+    "Productivity" -> tr("Productivity")
+    "Utilities" -> tr("Utilities")
+    else -> c
 }
