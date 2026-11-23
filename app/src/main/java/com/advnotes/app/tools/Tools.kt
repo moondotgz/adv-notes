@@ -24,6 +24,8 @@ interface NotebookTool {
     val name: String
     val description: String
     val icon: ImageVector
+    /** True when the tool is useless without AI; it is hidden while AI features are off. */
+    val requiresAi: Boolean get() = false
 
     @Composable
     fun Content(host: ToolHost)
@@ -94,4 +96,6 @@ data class WebToolManifest(
     val icon: String = "extension",
     val version: String = "1.0",
     val author: String = "",
+    /** The tool only works with AI (hidden while AI features are off). */
+    val requiresAi: Boolean = false,
 )

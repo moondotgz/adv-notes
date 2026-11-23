@@ -70,6 +70,8 @@ data class AppSettings(
     val pageNav: String = "ARROWS",
     /** Look for a newer GitHub release when the library opens. */
     val checkUpdates: Boolean = true,
+    /** Master switch: when false nothing is sent to an AI provider and AI buttons are hidden. */
+    val aiEnabled: Boolean = true,
     /** Paper style for pages added to an imported PDF (the PDF's own pages keep their look). */
     val pdfPaper: String = "NARROW_GRID",
     /** Import PDFs without allowing new pages to be added. */
@@ -128,6 +130,7 @@ class SettingsStore(context: Context) {
         panelSide = prefs.getString("panelSide", null) ?: "RIGHT",
         pageNav = prefs.getString("pageNav", null) ?: "ARROWS",
         checkUpdates = prefs.getBoolean("checkUpdates", true),
+        aiEnabled = prefs.getBoolean("aiEnabled", true),
         pdfPaper = prefs.getString("pdfPaper", null) ?: "NARROW_GRID",
         pdfLockPages = prefs.getBoolean("pdfLockPages", false),
     )
@@ -150,6 +153,7 @@ class SettingsStore(context: Context) {
             .putString("panelSide", s.panelSide)
             .putString("pageNav", s.pageNav)
             .putBoolean("checkUpdates", s.checkUpdates)
+            .putBoolean("aiEnabled", s.aiEnabled)
             .putString("pdfPaper", s.pdfPaper)
             .putBoolean("pdfLockPages", s.pdfLockPages)
             .apply()

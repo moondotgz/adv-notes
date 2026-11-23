@@ -177,6 +177,10 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
 
             SettingsGroup("AI", Icons.Default.AutoAwesome) {
+                SwitchRow(tr("AI features"), tr("Turn off to hide Solve, the AI chat and AI buttons in tools. Nothing is sent to an AI provider while it's off; handwriting to text still works on the device."), s.aiEnabled) { v ->
+                    app.settings.update { it.copy(aiEnabled = v) }
+                }
+                if (s.aiEnabled) {
                 Text(
                     tr("Used by Solve, To text and the AI chat. Lassoed handwriting is sent as an image to the provider you pick."),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -191,6 +195,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 key(s.provider) { ProviderConfig(s.provider) }
                 TestButton(s.provider)
+                }
             }
 
             DriveSection()

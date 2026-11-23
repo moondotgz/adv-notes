@@ -123,6 +123,7 @@ fun ToolPanel(
 private fun ToolPicker(tools: List<NotebookTool>, onOpen: (String) -> Unit) {
     var market by remember { mutableStateOf(false) }
     if (market) com.advnotes.app.tools.market.MarketplaceDialog(onDismiss = { market = false }, onOpen = onOpen)
+    val aiOn = com.advnotes.app.AdvNotesApp.instance.settings.state.collectAsState().value.aiEnabled
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         item {
             Text(tr("Tools"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp))
@@ -133,7 +134,7 @@ private fun ToolPicker(tools: List<NotebookTool>, onOpen: (String) -> Unit) {
             )
             Spacer(Modifier.size(8.dp))
         }
-        items(tools, key = { it.id }) { t ->
+        items(tools.filter { aiOn || !it.requiresAi }, key = { it.id }) { t ->
             ListItem(
                 headlineContent = { Text(t.name) },
                 supportingContent = { Text(t.description, maxLines = 2, overflow = TextOverflow.Ellipsis) },

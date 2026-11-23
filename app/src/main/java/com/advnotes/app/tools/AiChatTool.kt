@@ -81,6 +81,7 @@ import kotlinx.serialization.builtins.ListSerializer
 /** General-purpose AI chat for everything the solver doesn't cover. */
 object AiChatTool : NotebookTool {
     override val id = "aichat"
+    override val requiresAi = true
     override val name  get() = tr("AI chat")
     override val description  get() = tr("Ask anything: explanations, essays, languages, quizzes, flashcards; can look at your selection or page")
     override val icon = Icons.AutoMirrored.Filled.Chat

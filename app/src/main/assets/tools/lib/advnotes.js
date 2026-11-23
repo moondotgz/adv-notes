@@ -52,6 +52,8 @@
     theme: N.theme(),
     /** App language tag, e.g. "en" or "pt-BR", and its name ("Português (Brasil)"). */
     lang: N.language ? N.language() : 'en',
+    /** False when the user switched AI features off; elements with a data-ai attribute are hidden then. */
+    aiEnabled: N.aiEnabled ? N.aiEnabled() : true,
     languageName: N.languageName ? N.languageName() : 'English',
     /**
      * Translates English UI text with this tool's i18n/<lang>.json; falls back to English.
@@ -89,6 +91,7 @@
      */
     ask: function (prompt, opts) {
       opts = opts || {};
+      if (!window.AdvNotes.aiEnabled) return Promise.reject(new Error(t('AI features are turned off in Settings.')));
       return call('ai', { prompt: prompt, system: opts.system, history: opts.history, image: opts.image }, opts.onText);
     },
     /** Let the user pick a file; it is copied into the tool's storage. Resolves {name, url} or null. */
@@ -111,6 +114,11 @@
   // May run at document start, before <html> exists.
   function ready() {
     var root = document.documentElement;
+    if (!window.AdvNotes.aiEnabled) {
+      var st = document.createElement('style');
+      st.textContent = '[data-ai]{display:none !important}';
+      (document.head || root).appendChild(st);
+    }
     root.setAttribute('data-theme', window.AdvNotes.theme);
     var c = window.AdvNotes.colors;
     for (var k in c) root.style.setProperty('--an-' + k, c[k]);

@@ -488,8 +488,8 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                                 val v = canvas ?: return@SelectionBar
                                 hwRequest = HwRequest(v.selectedStrokes(), v.selectionBitmap())
                             },
-                            onSolve = {
-                                val v = canvas ?: return@SelectionBar
+                            onSolve = if (!settings.aiEnabled) null else fun() {
+                                val v = canvas ?: return
                                 aiImage = v.selectionBitmap()
                                 aiBounds = v.selectionBoundsPage()
                             },
@@ -861,7 +861,8 @@ private fun SelectionBar(
     hasItems: Boolean,
     canEditText: Boolean,
     onEditText: () -> Unit,
-    onSolve: () -> Unit,
+    /** null hides Solve (AI features off). */
+    onSolve: (() -> Unit)?,
     onToText: () -> Unit,
     onDuplicate: () -> Unit,
     onColor: (Int) -> Unit,
@@ -871,7 +872,7 @@ private fun SelectionBar(
     var colors by remember { mutableStateOf(false) }
     Surface(modifier, shape = RoundedCornerShape(26.dp), tonalElevation = 6.dp, shadowElevation = 6.dp) {
         Row(Modifier.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onSolve) {
+            if (onSolve != null) TextButton(onClick = onSolve) {
                 Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tr("Solve"))
             }
             TextButton(onClick = onToText) { Text(tr("To text")) }
@@ -1053,6 +1054,7 @@ private fun HandwritingSheet(
     var engine by remember {
         mutableStateOf(
             if (!hasInk) com.advnotes.app.ai.HwEngine.AI
+            else if (!settings.aiEnabled) com.advnotes.app.ai.HwEngine.ON_DEVICE
             else runCatching { com.advnotes.app.ai.HwEngine.valueOf(settings.hwEngine) }.getOrDefault(com.advnotes.app.ai.HwEngine.ON_DEVICE)
         )
     }
@@ -1104,7 +1106,7 @@ private fun HandwritingSheet(
                     }
                 }
                 com.advnotes.app.ai.HwEngine.entries.forEach { e ->
-                    val enabled = e == com.advnotes.app.ai.HwEngine.AI || (hasInk && lang.tag != null)
+                    val enabled = if (e == com.advnotes.app.ai.HwEngine.AI) settings.aiEnabled else (hasInk && lang.tag != null)
                     FilterChip(engine == e, { engine = e; run() }, label = { Text(e.label) }, enabled = enabled)
                 }
             }

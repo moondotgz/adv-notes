@@ -38,7 +38,14 @@ interface AiClient {
 private val JSON = "application/json".toMediaType()
 
 object AiClients {
-    fun forProvider(p: ProviderType, s: SettingsStore, chatGpt: ChatGptAuth, local: LocalLlama): AiClient = when (p) {
+    /** Used when AI features are switched off in Settings: refuses every request, so nothing is ever sent. */
+    private object Disabled : AiClient {
+        override suspend fun complete(req: VisionRequest, onText: (String) -> Unit): String =
+            throw AiException(com.advnotes.app.i18n.tr("AI features are turned off in Settings."))
+    }
+
+    fun forProvider(p: ProviderType, s: SettingsStore, chatGpt: ChatGptAuth, local: LocalLlama): AiClient =
+        if (!s.state.value.aiEnabled) Disabled else when (p) {
         ProviderType.OPENAI -> OpenAiChatClient("https://api.openai.com/v1", s.apiKey(p), s.model(p), official = true)
         ProviderType.OPENROUTER -> OpenAiChatClient("https://openrouter.ai/api/v1", s.apiKey(p), s.model(p), official = false)
         ProviderType.CUSTOM_OPENAI -> OpenAiChatClient(s.baseUrl(p), s.apiKey(p), s.model(p), official = false)

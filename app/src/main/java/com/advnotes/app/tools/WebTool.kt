@@ -64,6 +64,7 @@ class WebTool(
     override val id get() = manifest.id
     override val name get() = meta("name") ?: manifest.name
     override val description get() = meta("description") ?: manifest.description
+    override val requiresAi get() = manifest.requiresAi
 
     // ---- translations: <tool>/i18n/<tag>.json, keyed by the English text (see docs/TOOLS.md) ----
     private val stringsCache = HashMap<String, String?>()
@@ -228,6 +229,8 @@ class WebTool(
         @JavascriptInterface fun colors() = colorsJson
         /** App language tag ("en", "pt-BR"…), its display name, and this tool's translations for it (JSON). */
         @JavascriptInterface fun language() = lang
+        /** False when AI features are switched off in Settings. */
+        @JavascriptInterface fun aiEnabled() = com.advnotes.app.AdvNotesApp.instance.settings.state.value.aiEnabled
         @JavascriptInterface fun languageName() = langName
         @JavascriptInterface fun strings() = stringsJsonText
         @JavascriptInterface fun notebookTitle() = host.notebookTitle
