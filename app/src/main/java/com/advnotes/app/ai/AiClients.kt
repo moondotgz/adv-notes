@@ -44,7 +44,13 @@ object AiClients {
             throw AiException(com.advnotes.app.i18n.tr("AI features are turned off in Settings."))
     }
 
-    fun forProvider(p: ProviderType, s: SettingsStore, chatGpt: ChatGptAuth, local: LocalLlama): AiClient =
+    fun forProvider(
+        p: ProviderType,
+        s: SettingsStore,
+        chatGpt: ChatGptAuth,
+        claudeCode: ClaudeCodeAuth,
+        local: LocalLlama,
+    ): AiClient =
         if (!s.state.value.aiEnabled) Disabled else when (p) {
         ProviderType.OPENAI -> OpenAiChatClient("https://api.openai.com/v1", s.apiKey(p), s.model(p), official = true)
         ProviderType.OPENROUTER -> OpenAiChatClient("https://openrouter.ai/api/v1", s.apiKey(p), s.model(p), official = false)
@@ -52,6 +58,7 @@ object AiClients {
         ProviderType.ANTHROPIC -> AnthropicClient("https://api.anthropic.com", s.apiKey(p), s.model(p), official = true)
         ProviderType.CUSTOM_ANTHROPIC -> AnthropicClient(s.baseUrl(p), s.apiKey(p), s.model(p), official = false)
         ProviderType.CHATGPT -> ChatGptCodexClient(chatGpt, s.model(p))
+        ProviderType.CLAUDE_CODE -> ClaudeCodeClient(claudeCode, s.model(p))
         ProviderType.LOCAL -> local
     }
 
@@ -73,6 +80,7 @@ object AiClients {
                     .apply { if (p == ProviderType.CUSTOM_ANTHROPIC && key.isNotBlank()) header("Authorization", "Bearer $key") }
             }
             ProviderType.CHATGPT -> return ChatGptCodexClient.KNOWN_MODELS.map { ModelInfo(it, it, vision = true) }
+            ProviderType.CLAUDE_CODE -> return ClaudeCodeClient.KNOWN_MODELS.map { ModelInfo(it, it, vision = true) }
             ProviderType.LOCAL -> return emptyList()
         }.build()
         val resp = Http.client.newCall(req).await()
@@ -339,6 +347,79 @@ class ChatGptCodexClient(private val auth: ChatGptAuth, private val model: Strin
                 }
             }
         }
+        return out.toString()
+    }
+}
+
+/**
+ * Uses a Claude Pro/Max/Team/Enterprise subscription through the Claude Code OAuth sign-in
+ * (the same public client and headers the Claude Code CLI uses). Unofficial: Anthropic may
+ * change the backend at any time.
+ */
+class ClaudeCodeClient(private val auth: ClaudeCodeAuth, private val model: String) : AiClient {
+    companion object {
+        val KNOWN_MODELS = listOf(
+            "claude-opus-5-5",
+            "claude-sonnet-5-5",
+            "claude-haiku-5-5",
+            "claude-fable-5",
+        )
+        private const val URL = "https://api.anthropic.com/v1/messages?beta=true"
+        private const val IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude."
+    }
+
+    override suspend fun complete(req: VisionRequest, onText: (String) -> Unit): String {
+        val token = auth.validAccessToken() ?: throw AiException(tr("Sign in with Claude in Settings first."))
+        val body = buildJsonObject {
+            put("model", model.ifBlank { "claude-opus-5-5" })
+            put("max_tokens", 16000)
+            put("stream", true)
+            // OAuth tokens are gated to the Claude Code identity, which must be the first system block.
+            putJsonArray("system") {
+                addJsonObject { put("type", "text"); put("text", IDENTITY) }
+                if (req.system.isNotBlank()) addJsonObject { put("type", "text"); put("text", req.system) }
+            }
+            putJsonArray("messages") {
+                for (m in req.messages) addJsonObject {
+                    put("role", if (m.fromUser) "user" else "assistant")
+                    putJsonArray("content") {
+                        for (img in m.images) addJsonObject {
+                            put("type", "image")
+                            putJsonObject("source") {
+                                put("type", "base64"); put("media_type", "image/png"); put("data", img.b64())
+                            }
+                        }
+                        addJsonObject { put("type", "text"); put("text", m.text.ifEmpty { " " }) }
+                    }
+                }
+            }
+        }
+        val rb = Request.Builder()
+            .url(URL)
+            .post(body.toString().toRequestBody(JSON))
+            .header("Authorization", "Bearer $token")
+            .header("anthropic-version", "2023-06-01")
+            .header("anthropic-beta", "claude-code-20250219," + ClaudeCodeAuth.OAUTH_BETA)
+            .header("user-agent", ClaudeCodeAuth.USER_AGENT)
+            .header("x-app", "cli")
+            .header("Accept", "text/event-stream")
+
+        val out = StringBuilder()
+        var refused = false
+        streamSse(rb.build()) { _, data ->
+            val o = runCatching { Http.json.parseToJsonElement(data).jsonObject }.getOrNull() ?: return@streamSse
+            when (o["type"].str()) {
+                "content_block_delta" -> {
+                    val d = o["delta"].obj()
+                    if (d?.get("type").str() == "text_delta") {
+                        out.append(d?.get("text").str().orEmpty()); onText(out.toString())
+                    }
+                }
+                "message_delta" -> if (o["delta"].obj()?.get("stop_reason").str() == "refusal") refused = true
+                "error" -> throw AiException(o["error"].obj()?.get("message").str() ?: data)
+            }
+        }
+        if (refused && out.isBlank()) throw AiException(tr("The model declined to answer this request."))
         return out.toString()
     }
 }

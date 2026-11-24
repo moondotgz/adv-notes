@@ -67,6 +67,7 @@ Imported PDFs and images sync to Google Drive with the notebook.
 |---|---|
 | OpenAI (API key) | Chat Completions with image input. Default `gpt-5`. |
 | ChatGPT subscription (**unofficial**) | signs in as the open-source Codex CLI (same OAuth client and headers) and uses the Codex backend.|
+| Claude Code subscription (**unofficial**) | signs in as the Claude Code CLI (same OAuth client and headers) and uses its backend to bill a Claude Pro/Max/Team plan. |
 | Anthropic (API key) | Messages API, default `claude-opus-5-5`, with server-side refusal fallback enabled for models that support it. |
 | OpenRouter | Any vision model. |
 | Custom OpenAI-compatible | LM Studio, Ollama, llama.cpp server, vLLM, LiteLLM… (base URL + optional key) |
@@ -115,7 +116,7 @@ The calculator engine's own suite also runs against the compatibility layer on a
 app/src/main/java/com/advnotes/app/
   ink/      InkCanvasView (input, tools, viewport), StrokeRenderer, PaperRenderer, Shapes, Geometry
   editor/   EditorScreen + EditorViewModel (undo/redo, pages, AI sheet)
-  ai/       provider clients (SSE streaming), ChatGPT OAuth, llama.cpp bridge, model downloads
+  ai/       provider clients (SSE streaming), ChatGPT / Claude Code OAuth, llama.cpp bridge, model downloads
   sync/     Google Drive two-way sync (notebooks + imported files) + WorkManager job
   importer/ PDF, image, Samsung Notes (.sdocx) and Xournal++ (.xopp) import
   tools/    side panel, tool framework (native + web tools, JS bridge), calculator, AI chat

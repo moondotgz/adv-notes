@@ -200,7 +200,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                 }
                 override fun selectionImage() = canvas?.selectionBitmap()
                 override fun pageImage() = canvas?.let { it.regionBitmap(it.visiblePageRect()) }
-                override fun ai() = com.advnotes.app.ai.AiClients.forProvider(app.settings.state.value.provider, app.settings, app.chatGpt, app.local)
+                override fun ai() = com.advnotes.app.ai.AiClients.forProvider(app.settings.state.value.provider, app.settings, app.chatGpt, app.claudeCode, app.local)
                 override fun aiLabel(): String {
                     val p = app.settings.state.value.provider
                     val m = if (p == com.advnotes.app.data.ProviderType.LOCAL) app.settings.state.value.localModel else app.settings.model(p)
@@ -1073,7 +1073,7 @@ private fun HandwritingSheet(
                     com.advnotes.app.ai.Handwriting.recognizeOnDevice(req.strokes, lang) { status = it }
                 } else {
                     status = tr("Asking {0}…", settings.provider.label)
-                    val client = com.advnotes.app.ai.AiClients.forProvider(settings.provider, app.settings, app.chatGpt, app.local)
+                    val client = com.advnotes.app.ai.AiClients.forProvider(settings.provider, app.settings, app.chatGpt, app.claudeCode, app.local)
                     com.advnotes.app.ai.Handwriting.recognizeAi(client, req.image ?: error("No image"), lang) { text = it }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {

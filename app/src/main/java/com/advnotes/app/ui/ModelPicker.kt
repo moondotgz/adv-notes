@@ -76,7 +76,7 @@ fun ModelPicker(p: ProviderType, st: SettingsStore) {
     var open by remember { mutableStateOf(false) }
 
     fun canList() = when (p) {
-        ProviderType.OPENROUTER, ProviderType.CHATGPT -> true
+        ProviderType.OPENROUTER, ProviderType.CHATGPT, ProviderType.CLAUDE_CODE -> true
         ProviderType.OPENAI, ProviderType.ANTHROPIC -> st.apiKey(p).isNotBlank()
         ProviderType.CUSTOM_OPENAI, ProviderType.CUSTOM_ANTHROPIC -> st.baseUrl(p).isNotBlank()
         ProviderType.LOCAL -> false

@@ -30,6 +30,7 @@ enum class FingerMode(private val en: String) {
 enum class ProviderType(val label: String, val needsKey: Boolean, val needsBaseUrl: Boolean) {
     OPENAI("OpenAI (API key)", true, false),
     CHATGPT("ChatGPT subscription (unofficial)", false, false),
+    CLAUDE_CODE("Claude Code subscription (unofficial)", false, false),
     ANTHROPIC("Anthropic (API key)", true, false),
     OPENROUTER("OpenRouter", true, false),
     CUSTOM_OPENAI("Custom OpenAI-compatible", false, true),
@@ -40,6 +41,7 @@ enum class ProviderType(val label: String, val needsKey: Boolean, val needsBaseU
         get() = when (this) {
             OPENAI -> "gpt-5"
             CHATGPT -> "gpt-5"
+            CLAUDE_CODE -> "claude-opus-5-5"
             ANTHROPIC -> "claude-opus-5-5"
             OPENROUTER -> "openai/gpt-5"
             CUSTOM_OPENAI -> ""

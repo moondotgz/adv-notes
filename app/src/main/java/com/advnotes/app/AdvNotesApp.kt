@@ -3,6 +3,7 @@ package com.advnotes.app
 import android.app.Application
 import androidx.work.Configuration
 import com.advnotes.app.ai.ChatGptAuth
+import com.advnotes.app.ai.ClaudeCodeAuth
 import com.advnotes.app.ai.LocalLlama
 import com.advnotes.app.ai.ModelDownloads
 import com.advnotes.app.data.NotebookRepository
@@ -18,6 +19,7 @@ class AdvNotesApp : Application(), Configuration.Provider {
     lateinit var drive: DriveSync
         private set
     val chatGpt by lazy { ChatGptAuth(settings) }
+    val claudeCode by lazy { ClaudeCodeAuth(settings) }
     val local by lazy { LocalLlama(this, settings) }
     val downloads by lazy { ModelDownloads(local) }
     val tools by lazy { com.advnotes.app.tools.ToolRegistry(this, com.advnotes.app.tools.BuiltinTools.all()) }

@@ -218,7 +218,7 @@ fun SettingsScreen(onBack: () -> Unit) {
 
 private fun providerIcon(p: ProviderType) = when (p) {
     ProviderType.OPENAI, ProviderType.CHATGPT -> Icons.Default.Bolt
-    ProviderType.ANTHROPIC -> Icons.Default.AutoAwesome
+    ProviderType.CLAUDE_CODE, ProviderType.ANTHROPIC -> Icons.Default.AutoAwesome
     ProviderType.OPENROUTER -> Icons.Default.Hub
     ProviderType.CUSTOM_OPENAI, ProviderType.CUSTOM_ANTHROPIC -> Icons.Default.Dns
     ProviderType.LOCAL -> Icons.Default.PhoneAndroid
@@ -227,6 +227,7 @@ private fun providerIcon(p: ProviderType) = when (p) {
 private fun providerBlurb(p: ProviderType) = when (p) {
     ProviderType.OPENAI -> "GPT models with your OpenAI API key."
     ProviderType.CHATGPT -> "Your ChatGPT Plus/Pro plan, via the Codex sign-in. Unofficial."
+    ProviderType.CLAUDE_CODE -> "Your Claude Pro/Max/Team plan, via the Claude Code sign-in. Unofficial."
     ProviderType.ANTHROPIC -> "Claude models with your Anthropic API key."
     ProviderType.OPENROUTER -> "Hundreds of models with one key, with prices shown."
     ProviderType.CUSTOM_OPENAI -> "Your own server: LM Studio, Ollama, vLLM, LiteLLM…"
@@ -290,6 +291,7 @@ private fun ProviderConfig(p: ProviderType) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (p) {
             ProviderType.CHATGPT -> ChatGptConfig()
+            ProviderType.CLAUDE_CODE -> ClaudeCodeConfig()
             ProviderType.LOCAL -> LocalModelsConfig()
             else -> Unit
         }
@@ -315,6 +317,7 @@ private fun ProviderConfig(p: ProviderType) {
             ProviderType.CUSTOM_OPENAI -> "Any server with an OpenAI-style /chat/completions endpoint: LM Studio, Ollama, llama.cpp server, vLLM, LiteLLM…"
             ProviderType.CUSTOM_ANTHROPIC -> "Any server that implements the Anthropic /v1/messages API."
             ProviderType.CHATGPT -> "Unofficial workaround: signs in as the Codex CLI and uses its backend to bill your ChatGPT Plus/Pro plan. It is not OpenAI's approved \"Sign in with ChatGPT\" route for third-party apps, so it may stop working at any time, and any risk to your account is yours."
+            ProviderType.CLAUDE_CODE -> "Unofficial workaround: signs in as the Claude Code CLI and uses its backend to bill your Claude Pro/Max/Team plan. It is not Anthropic's approved route for third-party apps, so it may stop working at any time, and any risk to your account is yours."
             ProviderType.LOCAL -> "Runs a small vision model fully on this device with llama.cpp. No internet needed after download; slower and less accurate than cloud models."
         }
         Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -362,6 +365,62 @@ private fun ChatGptConfig() {
                 waiting = null
             }
         }) { Text(tr("Sign in with ChatGPT")) }
+    }
+    error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+}
+
+@Composable
+private fun ClaudeCodeConfig() {
+    val app = AdvNotesApp.instance
+    val auth = app.claudeCode
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var signedIn by remember { mutableStateOf(auth.isSignedIn()) }
+    var account by remember { mutableStateOf(auth.accountLabel()) }
+    var waiting by remember { mutableStateOf<Job?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var pasted by remember { mutableStateOf("") }
+
+    if (signedIn) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(tr("Signed in") + (account?.let { " as $it" } ?: ""), Modifier.weight(1f))
+            TextButton(onClick = { auth.signOut(); signedIn = false; account = null }) { Text(tr("Sign out")) }
+        }
+    } else if (waiting != null) {
+        Text(tr("Finish signing in in your browser…"))
+        LinearProgressIndicator(Modifier.fillMaxWidth())
+        Text(
+            tr("If the browser shows “can't reach this page” after signing in, copy the address from the address bar and paste it here:"),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        OutlinedTextField(pasted, { pasted = it }, label = { Text("http://localhost:…/callback?code=…") }, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(enabled = pasted.isNotBlank(), onClick = {
+                scope.launch {
+                    try {
+                        auth.completeFromUrl(pasted)
+                        signedIn = true; account = auth.accountLabel(); waiting?.cancel(); waiting = null
+                    } catch (e: Exception) {
+                        if (e !is kotlinx.coroutines.CancellationException) error = e.message
+                    }
+                }
+            }) { Text(tr("Use pasted URL")) }
+            OutlinedButton(onClick = { auth.cancel(); waiting?.cancel(); waiting = null }) { Text(tr("Cancel")) }
+        }
+    } else {
+        Button(onClick = {
+            error = null
+            waiting = scope.launch {
+                try {
+                    auth.signIn(ctx)
+                    signedIn = true
+                    account = auth.accountLabel()
+                } catch (e: Exception) {
+                    if (e !is kotlinx.coroutines.CancellationException) error = e.message
+                }
+                waiting = null
+            }
+        }) { Text(tr("Sign in with Claude")) }
     }
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 }
@@ -492,7 +551,7 @@ private fun TestButton(p: ProviderType) {
                         drawColor(android.graphics.Color.WHITE)
                         drawText("12 × 7 =", 30f, 80f, Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 56f })
                     }
-                    val client = AiClients.forProvider(p, app.settings, app.chatGpt, app.local)
+                    val client = AiClients.forProvider(p, app.settings, app.chatGpt, app.claudeCode, app.local)
                     "✓ " + client.complete(MathSolver.request(bmp, SolveMode.ANSWER, "")) { }.trim()
                 } catch (e: Exception) {
                     "✗ " + (e.message ?: e.toString())

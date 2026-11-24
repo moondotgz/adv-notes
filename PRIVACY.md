@@ -21,7 +21,7 @@ The app's use of information received from Google APIs adheres to the [Google AP
 
 ## AI features (optional)
 
-When you use the solver, handwriting-to-text with an AI engine, or the AI chat tool, the content you select (an image of your selection or page, and any text you type) is sent to the AI provider **you choose and configure**: OpenAI, Anthropic, OpenRouter, a ChatGPT sign-in, a custom endpoint you enter, or an on-device model that sends nothing anywhere. Your API keys and sign-in tokens are stored on your device in encrypted storage. Each provider's own privacy policy applies to what they receive. Nothing is sent to an AI provider unless you start a request.
+When you use the solver, handwriting-to-text with an AI engine, or the AI chat tool, the content you select (an image of your selection or page, and any text you type) is sent to the AI provider **you choose and configure**: OpenAI, Anthropic, OpenRouter, a ChatGPT sign-in, a Claude Code sign-in, a custom endpoint you enter, or an on-device model that sends nothing anywhere. Your API keys and sign-in tokens are stored on your device in encrypted storage. Each provider's own privacy policy applies to what they receive. Nothing is sent to an AI provider unless you start a request.
 
 ## Other network use
 

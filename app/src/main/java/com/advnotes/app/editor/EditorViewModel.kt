@@ -378,7 +378,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         aiJob = viewModelScope.launch {
             try {
                 val provider = a.settings.state.value.provider
-                val client = AiClients.forProvider(provider, a.settings, a.chatGpt, a.local)
+                val client = AiClients.forProvider(provider, a.settings, a.chatGpt, a.claudeCode, a.local)
                 val req = MathSolver.request(bitmap, mode, extra, subject)
                 val text = client.complete(req) { partial -> _ai.value = AiState.Running(partial) }
                 _ai.value = if (text.isBlank()) AiState.Error("The model returned an empty answer.") else AiState.Done(text.trim())
