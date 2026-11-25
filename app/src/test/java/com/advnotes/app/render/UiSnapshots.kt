@@ -342,6 +342,39 @@ class UiSnapshots {
         com.advnotes.app.i18n.I18n.set("")
     }
 
+    /** Text tool: drag out a box, type straight onto the page, finish; then tap the text to edit it in place. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w1280dp-h800dp-land-xhdpi")
+    fun textBoxes() {
+        val app = AdvNotesApp.instance
+        runBlocking { app.repo.save(Notebook(title = "Notes", paper = PaperStyle.NARROW_GRID)) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Notes").performClick()
+        rule.waitForIdle()
+        val canvas = findCanvas(rule.activity.window.decorView)!!
+        rule.onNodeWithContentDescriptionCompat("Text")
+        // drag a box from (200,300) to (900,340) in view pixels
+        pen(canvas, (0..20).map { i -> (200f + i * 35f) to (300f + i * 2f) }, { 0.5f })
+        rule.waitForIdle()
+        rule.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextInput("Photosynthesis turns light into chemical energy")
+        snap("50_text_box_typing")
+        rule.onNodeWithContentDescriptionCompat("Done")
+        rule.waitForIdle()
+        val t = canvas.page.texts.single()
+        assertEquals("Photosynthesis turns light into chemical energy", t.text)
+        assertTrue("box width follows the drag (${t.width})", t.width > 150f && t.width < 900f)
+        snap("51_text_box_done")
+        // tap the text to edit it in place
+        val vx = canvas.pageToViewX(t.x + 20f); val vy = canvas.pageToViewY(t.y + 10f)
+        pen(canvas, listOf(vx to vy, vx + 1f to vy), { 0.5f })
+        rule.waitForIdle()
+        rule.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextInput(" (in chloroplasts)")
+        rule.onNodeWithContentDescriptionCompat("Done")
+        rule.waitForIdle()
+        assertEquals(1, canvas.page.texts.size)
+        assertTrue(canvas.page.texts.single().text.endsWith("(in chloroplasts)"))
+    }
+
     /** Regression: SHIFT legends pushed key labels out of the keys with big fonts. */
     @Test
     @Config(sdk = [34], qualifiers = "w411dp-h891dp-night-xxhdpi", fontScale = 1.3f)

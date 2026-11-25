@@ -16,8 +16,8 @@ android {
         applicationId = "com.advnotes.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 26
-        versionName = "1.6.4"
+        versionCode = 27
+        versionName = "1.7.0"
         buildConfigField("boolean", "HAS_LLAMA", buildLlama.toString())
 
         // -PwithX86 adds x86_64 so debug builds run in Waydroid / emulators; releases stay arm64-only.

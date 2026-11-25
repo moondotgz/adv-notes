@@ -44,6 +44,11 @@ import androidx.compose.material.icons.filled.HorizontalRule
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -149,7 +154,11 @@ import androidx.compose.ui.layout.positionInRoot
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-private data class TextRequest(val x: Float, val y: Float, val existing: TextBox?)
+/** A text box being typed into on the page. Position and width are in page units. */
+private data class TextEdit(
+    val slot: Int, val x: Float, val y: Float, val width: Float, val existing: TextBox?,
+    val text: String, val size: Float, val color: Int,
+)
 
 private data class HwRequest(val strokes: List<com.advnotes.app.model.Stroke>, val image: Bitmap?)
 
@@ -167,7 +176,9 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
 
     var canvas by remember { mutableStateOf<InkCanvasView?>(null) }
     var selInfo by remember { mutableStateOf<SelectionInfo?>(null) }
-    var textReq by remember { mutableStateOf<TextRequest?>(null) }
+    var textEdit by remember { mutableStateOf<TextEdit?>(null) }
+    var viewportTick by remember { mutableStateOf(0) }       // bumped on pan/zoom so the text editor follows the page
+    var lastTextSize by remember { mutableStateOf(22f) }
     var aiImage by remember { mutableStateOf<Bitmap?>(null) }
     var aiBounds by remember { mutableStateOf<RectF?>(null) }
     var hwRequest by remember { mutableStateOf<HwRequest?>(null) }
@@ -248,6 +259,26 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
 
     val leave = { vm.onLeave(); onBack() }
     BackHandler { leave() }
+
+    /** Saves the text box being edited (an empty one is removed) and returns to the page. */
+    fun finishText() {
+        val e = textEdit ?: return
+        textEdit = null
+        canvases[e.slot]?.editingTextId = null
+        val old = e.existing
+        if (old != null && old.text == e.text && old.size == e.size && old.color == e.color && old.width == e.width) return
+        vm.upsertText(e.x, e.y, old, e.text, e.size, e.color, e.width)
+    }
+    fun startText(slot: Int, x: Float, y: Float, existing: TextBox?, width: Float) {
+        finishText()
+        textEdit = TextEdit(slot, x, y, width, existing, existing?.text ?: "", existing?.size ?: lastTextSize, existing?.color ?: tool.penColor)
+        canvases[slot]?.let { v ->
+            v.editingTextId = existing?.id
+            if (v.pageToViewY(y) > v.height * 0.4f) v.revealPageY(y)   // keep it clear of the keyboard
+        }
+    }
+    BackHandler(enabled = textEdit != null) { finishText() }
+    LaunchedEffect(tool.tool) { finishText() }
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
@@ -410,7 +441,8 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                                 v.listener = object : InkCanvasView.Listener {
                                     override fun onCommit(page: Page) = vm.commit(page)
                                     override fun onSelectionChanged(info: SelectionInfo?) { if (activeSlot == slot) selInfo = info }
-                                    override fun onTextRequest(x: Float, y: Float, existing: TextBox?) { textReq = TextRequest(x, y, existing) }
+                                    override fun onTextRequest(x: Float, y: Float, existing: TextBox?, width: Float) = startText(slot, x, y, existing, width)
+                                    override fun onViewport() { viewportTick++ }
                                     override fun onStylusSeen() {
                                         canvases.forEach { it?.stylusSeen = true }
                                         if (app.settings.state.value.fingerMode == com.advnotes.app.data.FingerMode.AUTO) {
@@ -422,6 +454,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                                         vm.swipe(dir, if (app.settings.state.value.pageNav == "TWO_PAGE") 2 else 1)
                                     }
                                     override fun onTouchStart() {
+                                        finishText()
                                         if (activeSlot != slot) {
                                             canvases.getOrNull(activeSlot)?.clearSelection()
                                             selInfo = null
@@ -468,6 +501,13 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                         },
                     )
                     }
+                    textEdit?.takeIf { it.slot == slot }?.let { e ->
+                        val v = canvases[slot]
+                        if (v != null) {
+                            viewportTick   // re-place on pan/zoom
+                            TextBoxEditor(e, v, boxW, onChange = { textEdit = it; lastTextSize = it.size }, onDone = { finishText() })
+                        }
+                    }
                     if (slot == activeSlot) selInfo?.let { s ->
                         val density = LocalDensity.current
                         val barH = with(density) { 52.dp.toPx() }
@@ -482,7 +522,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                                 val v = canvas ?: return@SelectionBar
                                 val t = v.selectedTexts().singleOrNull() ?: return@SelectionBar
                                 v.clearSelection()
-                                textReq = TextRequest(t.x, t.y, t)
+                                startText(activeSlot, t.x, t.y, t, t.width)
                             },
                             onToText = {
                                 val v = canvas ?: return@SelectionBar
@@ -627,12 +667,6 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
         )
     }
 
-    textReq?.let { req ->
-        TextDialog(req.existing, tool.penColor, onDismiss = { textReq = null }) { text, size, color ->
-            vm.upsertText(req.x, req.y, req.existing, text, size, color)
-            textReq = null
-        }
-    }
 
     hwRequest?.let { req ->
         HandwritingSheet(
@@ -892,32 +926,83 @@ private fun SelectionBar(
     }
 }
 
+/**
+ * Types straight onto the page: an editable box drawn at the text's place and zoom, with a dashed outline,
+ * a handle on the right edge to change where lines wrap, and a small bar for size, colour and delete.
+ */
 @Composable
-private fun TextDialog(existing: TextBox?, defaultColor: Int, onDismiss: () -> Unit, onSave: (String, Float, Int) -> Unit) {
-    var text by remember { mutableStateOf(existing?.text ?: "") }
-    var size by remember { mutableStateOf(existing?.size ?: 22f) }
-    var color by remember { mutableStateOf(existing?.color ?: defaultColor) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (existing == null) tr("Add text") else tr("Edit text")) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(text, { text = it }, modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp))
-                Text(tr("Size: {0}", size.roundToInt()))
-                Slider(size, { size = it }, valueRange = 12f..60f)
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    PEN_COLORS.forEach { c -> ColorDot(c, c == color) { color = c } }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = { onSave(text, size, color) }) { Text(tr("Save")) } },
-        dismissButton = {
-            Row {
-                if (existing != null) TextButton(onClick = { onSave("", size, color) }) { Text(tr("Delete")) }
-                TextButton(onClick = onDismiss) { Text(tr("Cancel")) }
-            }
-        },
-    )
+private fun TextBoxEditor(e: TextEdit, v: InkCanvasView, areaW: Int, onChange: (TextEdit) -> Unit, onDone: () -> Unit) {
+    val d = LocalDensity.current
+    val cur by androidx.compose.runtime.rememberUpdatedState(e)
+    val s = v.viewScale
+    val vx = v.pageToViewX(e.x); val vy = v.pageToViewY(e.y)
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    var boxH by remember { mutableStateOf(0) }
+    val primary = MaterialTheme.colorScheme.primary
+    val field = androidx.compose.ui.text.input.TextFieldValue(e.text, androidx.compose.ui.text.TextRange(e.text.length))
+    var tfv by remember(e.existing?.id, e.x, e.y) { mutableStateOf(field) }
+    if (tfv.text != e.text) tfv = tfv.copy(text = e.text)
+
+    Box(
+        Modifier
+            .offset { IntOffset(vx.roundToInt(), vy.roundToInt()) }
+            .width(with(d) { (e.width * s).toDp() })
+            .onSizeChanged { boxH = it.height },
+    ) {
+        androidx.compose.foundation.text.BasicTextField(
+            value = tfv,
+            onValueChange = { tfv = it; if (it.text != cur.text) onChange(cur.copy(text = it.text)) },
+            textStyle = androidx.compose.ui.text.TextStyle(color = androidx.compose.ui.graphics.Color(e.color), fontSize = with(d) { (e.size * s).toSp() }),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(primary),
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(focus)
+                .drawBehind {
+                    drawRect(
+                        primary, topLeft = Offset(-4f, -4f), size = androidx.compose.ui.geometry.Size(size.width + 8f, size.height + 8f),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            1.5.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(14f, 10f)),
+                        ),
+                    )
+                },
+        )
+        // drag the right edge to change where lines wrap
+        Box(
+            Modifier
+                .align(Alignment.CenterEnd)
+                .offset(x = 14.dp)
+                .size(22.dp)
+                .background(primary, CircleShape)
+                .pointerInput(Unit) {
+                    detectDragGestures { ch, drag ->
+                        ch.consume()
+                        val c = cur
+                        onChange(c.copy(width = (c.width + drag.x / v.viewScale).coerceIn(40f, com.advnotes.app.model.PAGE_WIDTH - c.x)))
+                    }
+                },
+        )
+    }
+
+    // style bar above the box (below it when there's no room)
+    val barH = with(d) { 48.dp.toPx() }
+    val gap = with(d) { 10.dp.toPx() }
+    val by = if (vy - barH - gap > 0) vy - barH - gap else vy + boxH + gap
+    val barW = with(d) { 420.dp.toPx() }
+    val bx = vx.coerceIn(8f, (areaW - barW - 8f).coerceAtLeast(8f))
+    Surface(
+        Modifier.offset { IntOffset(bx.roundToInt(), by.roundToInt()) },
+        shape = RoundedCornerShape(24.dp), tonalElevation = 6.dp, shadowElevation = 6.dp,
+    ) {
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { onChange(cur.copy(size = (cur.size - 2f).coerceAtLeast(10f))) }) { Text("A−") }
+            Text("${e.size.roundToInt()}", style = MaterialTheme.typography.labelLarge)
+            TextButton(onClick = { onChange(cur.copy(size = (cur.size + 2f).coerceAtMost(120f))) }) { Text("A+") }
+            PEN_COLORS.take(6).forEach { c -> Box(Modifier.padding(horizontal = 2.dp)) { ColorDot(c, c == e.color, 26.dp) { onChange(cur.copy(color = c)) } } }
+            IconButton(onClick = { onChange(cur.copy(text = "")); onDone() }) { Icon(Icons.Default.Delete, tr("Delete")) }
+            IconButton(onClick = onDone) { Icon(Icons.Default.Check, tr("Done")) }
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------------------

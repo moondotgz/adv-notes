@@ -68,7 +68,10 @@ class InkCanvasView(context: Context) : View(context) {
     interface Listener {
         fun onCommit(page: Page)
         fun onSelectionChanged(info: SelectionInfo?)
-        fun onTextRequest(x: Float, y: Float, existing: TextBox?)
+        /** Text tool: edit [existing], or start a new box at (x, y) of [width] page units. */
+        fun onTextRequest(x: Float, y: Float, existing: TextBox?, width: Float)
+        /** The viewport moved or zoomed (overlays positioned over the page follow it). */
+        fun onViewport() {}
         fun onStylusSeen()
         /** A pan past the page edge along [swipeAxis]: +1 = next page, -1 = previous. */
         fun onSwipePage(dir: Int) {}
@@ -89,6 +92,9 @@ class InkCanvasView(context: Context) : View(context) {
     private val swipeThreshold get() = 170f * density
     private val labelPaint by lazy { Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 15f * density; textAlign = Paint.Align.CENTER; isFakeBoldText = true } }
     private val pillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val textBoxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; color = 0xFF3B82F6.toInt(); pathEffect = DashPathEffect(floatArrayOf(8f, 6f), 0f)
+    }
 
     var listener: Listener? = null
     val renderer = StrokeRenderer()
@@ -268,6 +274,7 @@ class InkCanvasView(context: Context) : View(context) {
     private fun afterViewportChange() {
         layerDirty = true
         notifySelection()
+        listener?.onViewport()
         invalidate()
     }
 
@@ -296,7 +303,22 @@ class InkCanvasView(context: Context) : View(context) {
     // Drawing
     // ------------------------------------------------------------------------------------
 
-    private fun excluded(): Set<String> = selection?.ids ?: emptySet()
+    private fun excluded(): Set<String> = (selection?.ids ?: emptySet()) + listOfNotNull(editingTextId)
+
+    /** Text box being edited in place by the editor; hidden here while its editor is shown over the page. */
+    var editingTextId: String? = null
+        set(v) { if (field != v) { field = v; layerDirty = true; invalidate() } }
+
+    /** Page units → view pixels, and the current zoom (view pixels per page unit), for overlays. */
+    fun pageToViewX(px: Float) = toViewX(px)
+    fun pageToViewY(py: Float) = toViewY(py)
+    val viewScale: Float get() = scale
+
+    /** Scrolls so page y [py] sits [frac] of the way down the view (e.g. to keep a text box above the keyboard). */
+    fun revealPageY(py: Float, frac: Float = 0.22f) {
+        ty = height * frac - py * scale
+        clampViewport(); afterViewportChange()
+    }
 
     private fun drawScene(c: Canvas, pageToDraw: Page) {
         c.drawColor(deskColor)
@@ -404,6 +426,10 @@ class InkCanvasView(context: Context) : View(context) {
             Mode.SNAPPED -> snapped.forEach { renderer.draw(canvas, shapeStroke(it, drawKind, drawColor, drawWidth), live = true) }
             Mode.SHAPE -> shapeNow().forEach {
                 renderer.draw(canvas, shapeStroke(it, InkKind.PEN, tool.penColor, tool.penWidth), live = true)
+            }
+            Mode.TEXT -> if (hypot(curX - startX, curY - startY) * scale >= 12 * density) {
+                val l = min(startX, curX); val t = min(startY, curY)
+                canvas.drawRect(l, t, max(startX, curX), max(t + 40f, max(startY, curY)), textBoxPaint.apply { strokeWidth = 1.5f / scale })
             }
             else -> Unit
         }
@@ -603,6 +629,7 @@ class InkCanvasView(context: Context) : View(context) {
         overX = if (canSwipe && swipeAxis == 1) rawTx - tx else 0f
         overY = if (canSwipe && swipeAxis == 2) rawTy - ty else 0f
         notifySelection()
+        listener?.onViewport()
         invalidate()
     }
 
@@ -845,10 +872,16 @@ class InkCanvasView(context: Context) : View(context) {
             }
             Mode.TEXT -> {
                 if (hypot(curX - startX, curY - startY) * scale < 12 * density) {
+                    // tap: edit the text under the pen, or start a box of default width
                     val hit = page.texts.lastOrNull { t ->
                         startX >= t.x && startX <= t.x + t.width && startY >= t.y && startY <= t.y + renderer.textHeight(t)
                     }
-                    listener?.onTextRequest(startX, startY, hit)
+                    val w = (PAGE_WIDTH - startX - 10f * com.advnotes.app.model.MM).coerceIn(120f, PAGE_WIDTH * 0.45f)
+                    listener?.onTextRequest(startX, startY, hit, hit?.width ?: w)
+                } else {
+                    // drag: the box spans what was dragged out (its width sets where lines wrap)
+                    val l = min(startX, curX).coerceAtLeast(0f); val t = min(startY, curY).coerceAtLeast(0f)
+                    listener?.onTextRequest(l, t, null, (max(startX, curX) - l).coerceIn(60f, PAGE_WIDTH - l))
                 }
             }
             Mode.MOVE_SEL, Mode.SCALE_SEL -> applySelectionTransform()
