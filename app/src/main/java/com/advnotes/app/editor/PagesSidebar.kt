@@ -30,6 +30,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -125,13 +127,18 @@ fun PagesSidebar(
     Surface(modifier, tonalElevation = 2.dp, shadowElevation = 2.dp) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(if (selecting) tr("{0} selected", picked.size) else tr("Pages"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text(if (selecting) tr("{0} selected", picked.size) else tr("Pages"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f),
+                    maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 if (selecting) {
                     IconButton(onClick = { confirmDelete = picked }, Modifier.size(40.dp), enabled = picked.isNotEmpty() && !nb.lockPages) {
                         Icon(Icons.Default.Delete, tr("Delete selected pages"))
                     }
-                    TextButton(onClick = { selecting = false; picked = emptySet() }) { Text(tr("Done")) }
-                } else if (!nb.lockPages) TextButton(onClick = { selecting = true }) { Text(tr("Select")) }
+                    IconButton(onClick = { selecting = false; picked = emptySet() }, Modifier.size(40.dp)) {
+                        Icon(androidx.compose.material.icons.Icons.Default.Check, tr("Done"))
+                    }
+                } else if (!nb.lockPages) IconButton(onClick = { selecting = true }, Modifier.size(40.dp)) {
+                    Icon(androidx.compose.material.icons.Icons.Default.Checklist, tr("Select"))
+                }
                 IconButton(onClick = onClose, Modifier.size(40.dp)) { Icon(Icons.Default.Close, tr("Close pages")) }
             }
             LazyRow(Modifier.fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
