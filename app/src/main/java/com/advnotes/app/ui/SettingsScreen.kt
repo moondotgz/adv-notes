@@ -1,5 +1,8 @@
 package com.advnotes.app.ui
 
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.filled.Palette
@@ -155,10 +158,16 @@ fun SettingsScreen(onBack: () -> Unit) {
                     { k -> app.settings.update { it.copy(themeMode = k) } })
                 FieldLabel(tr("Colours"), if (android.os.Build.VERSION.SDK_INT >= 31) tr("Wallpaper colours follow your phone's theme (Material You).") else null)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    FilterChip(s.themeSeed == 0, { app.settings.update { it.copy(themeSeed = 0) } },
+                    FilterChip(s.themeSeed == 0 && s.editorTheme.isEmpty(), { app.settings.update { it.copy(themeSeed = 0, editorTheme = "") } },
                         label = { Text(if (android.os.Build.VERSION.SDK_INT >= 31) tr("Wallpaper") else tr("Default")) })
-                    THEME_SEEDS.forEach { c -> ColorDot(c, s.themeSeed == c, 34.dp) { app.settings.update { it.copy(themeSeed = c) } } }
-                    CustomColorDots(s.themeSeed.takeIf { it != 0 }, 34.dp) { c -> app.settings.update { it.copy(themeSeed = c or 0xFF000000.toInt()) } }
+                    THEME_SEEDS.forEach { c -> ColorDot(c, s.themeSeed == c && s.editorTheme.isEmpty(), 34.dp) { app.settings.update { it.copy(themeSeed = c, editorTheme = "") } } }
+                    CustomColorDots(s.themeSeed.takeIf { it != 0 && s.editorTheme.isEmpty() }, 34.dp) { c -> app.settings.update { it.copy(themeSeed = c or 0xFF000000.toInt(), editorTheme = "") } }
+                }
+                FieldLabel(tr("Editor themes"), tr("Themes with a light and a dark version follow the Theme setting; dark-only ones stay dark."))
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    EDITOR_THEMES.forEach { t -> EditorThemeSwatch(t, s.editorTheme == t.key, isDarkNow = LocalAppDark.current) {
+                        app.settings.update { it.copy(editorTheme = if (it.editorTheme == t.key) "" else t.key) }
+                    } }
                 }
                 FieldLabel(tr("Font"))
                 APP_FONTS.forEach { (key, name, family) ->
@@ -909,6 +918,30 @@ private fun LocalLogs() {
                     TextButton(onClick = { com.advnotes.app.ai.LlamaLog.clear() }) { Text("Clear") }
                 }
             },
+        )
+    }
+}
+
+/** A small preview card of an editor theme: its background with the three accent colours. */
+@Composable
+private fun EditorThemeSwatch(t: EditorTheme, selected: Boolean, isDarkNow: Boolean, onClick: () -> Unit) {
+    val v = t.variant(isDarkNow)
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        Modifier.width(104.dp).clip(shape)
+            .border(if (selected) 3.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, shape)
+            .background(androidx.compose.ui.graphics.Color(v.bg)).clickable(onClick = onClick).padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            listOf(v.primary, v.secondary, v.tertiary).forEach { c ->
+                Box(Modifier.size(16.dp).clip(CircleShape).background(androidx.compose.ui.graphics.Color(c)))
+            }
+        }
+        Text(t.name, color = androidx.compose.ui.graphics.Color(v.fg), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        Text(
+            when { t.light == null -> tr("Dark"); t.dark == null -> tr("Light"); else -> tr("Light & dark") },
+            color = androidx.compose.ui.graphics.Color(v.muted), style = MaterialTheme.typography.labelSmall,
         )
     }
 }

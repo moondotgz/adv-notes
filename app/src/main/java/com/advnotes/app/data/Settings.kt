@@ -80,6 +80,8 @@ data class AppSettings(
     val themeSeed: Int = 0,
     /** App font: see ui/Theme.kt APP_FONTS. */
     val appFont: String = "SYSTEM",
+    /** Key of an editor theme (ui/EditorThemes.kt) or "" for the palette above. */
+    val editorTheme: String = "",
     /** Paper style for pages added to an imported PDF (the PDF's own pages keep their look). */
     val pdfPaper: String = "NARROW_GRID",
     /** Import PDFs without allowing new pages to be added. */
@@ -142,6 +144,7 @@ class SettingsStore(context: Context) {
         themeMode = prefs.getString("themeMode", null) ?: "SYSTEM",
         themeSeed = prefs.getInt("themeSeed", 0),
         appFont = prefs.getString("appFont", null) ?: "SYSTEM",
+        editorTheme = prefs.getString("editorTheme", null) ?: "",
         pdfPaper = prefs.getString("pdfPaper", null) ?: "NARROW_GRID",
         pdfLockPages = prefs.getBoolean("pdfLockPages", false),
     )
@@ -168,6 +171,7 @@ class SettingsStore(context: Context) {
             .putString("themeMode", s.themeMode)
             .putInt("themeSeed", s.themeSeed)
             .putString("appFont", s.appFont)
+            .putString("editorTheme", s.editorTheme)
             .putString("pdfPaper", s.pdfPaper)
             .putBoolean("pdfLockPages", s.pdfLockPages)
             .apply()

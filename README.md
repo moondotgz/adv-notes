@@ -81,7 +81,7 @@ Each provider has a ↻ button that loads its model list, plus a *Test connectio
 
 ## Appearance
 
-Settings → Appearance: light, dark or system theme; your wallpaper colours, a preset or any custom colour; and a choice of fonts (system, serif, and the bundled Nunito, Lora, Atkinson Hyperlegible, Lexend, Caveat and JetBrains Mono, all under the SIL Open Font License, see `app/src/main/assets/licenses/fonts`).
+Settings → Appearance: light, dark or system theme; your wallpaper colours, a preset or any custom colour; editor themes (Monokai, Dracula, Rosé Pine, Nord, Gruvbox, Catppuccin, Solarized, Tokyo Night, One Dark); and a choice of fonts (system, serif, and the bundled Nunito, Lora, Atkinson Hyperlegible, Lexend, Caveat and JetBrains Mono, all under the SIL Open Font License, see `app/src/main/assets/licenses/fonts`).
 
 ## Languages
 

@@ -430,6 +430,27 @@ class UiSnapshots {
         app.settings.update { it.copy(themeMode = "SYSTEM", themeSeed = 0, appFont = "SYSTEM") }
     }
 
+    /** Editor themes (Monokai, Rosé Pine, …) recolour the whole app; light/dark variants follow the theme mode. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w1280dp-h800dp-land-xhdpi")
+    fun editorThemes() {
+        val app = AdvNotesApp.instance
+        runBlocking {
+            app.repo.save(Notebook(title = "Algorithms", paper = PaperStyle.GRID, cover = 0xFF7B4BD8.toInt()))
+            app.repo.save(Notebook(title = "Lab notes", paper = PaperStyle.DOTTED, cover = 0xFF0C8599.toInt()))
+        }
+        for ((key, mode) in listOf("monokai" to "DARK", "dracula" to "DARK", "rosepine" to "DARK", "rosepine" to "LIGHT",
+                "gruvbox" to "DARK", "gruvbox" to "LIGHT", "catppuccin" to "DARK", "catppuccin" to "LIGHT", "nord" to "DARK", "tokyonight" to "DARK")) {
+            app.settings.update { it.copy(editorTheme = key, themeMode = mode) }
+            rule.waitForIdle()
+            snap("70_theme_${key}_${mode.lowercase()}")
+        }
+        rule.onNodeWithText("Algorithms").performClick()
+        rule.waitForIdle()
+        snap("71_editor_rosepine_dark_in_notebook")
+        app.settings.update { it.copy(editorTheme = "", themeMode = "SYSTEM") }
+    }
+
     /** Regression: SHIFT legends pushed key labels out of the keys with big fonts. */
     @Test
     @Config(sdk = [34], qualifiers = "w411dp-h891dp-night-xxhdpi", fontScale = 1.3f)

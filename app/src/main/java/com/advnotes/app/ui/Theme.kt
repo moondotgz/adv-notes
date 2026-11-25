@@ -152,9 +152,12 @@ fun schemeFromSeed(seed: Int, dark: Boolean): androidx.compose.material3.ColorSc
 @Composable
 fun AdvNotesTheme(content: @Composable () -> Unit) {
     val settings by com.advnotes.app.AdvNotesApp.instance.settings.state.collectAsState()
-    val dark = when (settings.themeMode) { "LIGHT" -> false; "DARK" -> true; else -> isSystemInDarkTheme() }
+    val wantDark = when (settings.themeMode) { "LIGHT" -> false; "DARK" -> true; else -> isSystemInDarkTheme() }
+    val editor = EDITOR_THEMES.firstOrNull { it.key == settings.editorTheme }?.variant(wantDark)
+    val dark = editor?.dark ?: wantDark            // dark-only editor themes stay dark
     val ctx = LocalContext.current
     val scheme = when {
+        editor != null -> schemeFor(editor)
         settings.themeSeed != 0 -> schemeFromSeed(settings.themeSeed, dark)
         Build.VERSION.SDK_INT >= 31 -> if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
         dark -> Dark
