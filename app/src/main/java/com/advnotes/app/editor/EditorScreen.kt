@@ -764,11 +764,14 @@ private fun ToolBar(
         if (vertical) HorizontalDivider(Modifier.width(32.dp).padding(vertical = 6.dp))
         else VerticalDivider(Modifier.height(32.dp).padding(horizontal = 6.dp))
         when (tool.tool) {
-            Tool.PEN, Tool.LINE, Tool.SHAPE, Tool.TEXT -> PEN_COLORS.forEach { c ->
-                ColorDot(c, c == tool.penColor) { onChange(tool.copy(penColor = c)) }
+            Tool.PEN, Tool.LINE, Tool.SHAPE, Tool.TEXT -> {
+                PEN_COLORS.forEach { c -> ColorDot(c, c == tool.penColor) { onChange(tool.copy(penColor = c)) } }
+                com.advnotes.app.ui.CustomColorDots(tool.penColor) { c -> onChange(tool.copy(penColor = c)) }
             }
-            Tool.HIGHLIGHTER -> HIGHLIGHTER_COLORS.forEach { c ->
-                ColorDot(c, c == tool.hlColor) { onChange(tool.copy(hlColor = c)) }
+            Tool.HIGHLIGHTER -> {
+                HIGHLIGHTER_COLORS.forEach { c -> ColorDot(c, c == tool.hlColor) { onChange(tool.copy(hlColor = c)) } }
+                // highlighter keeps its see-through look
+                com.advnotes.app.ui.CustomColorDots(tool.hlColor, withAlpha = { (it and 0xFFFFFF) or 0x66000000 }) { c -> onChange(tool.copy(hlColor = c)) }
             }
             Tool.ERASER -> if (!vertical) EraserMode.entries.forEach { m ->
                 FilterChip(m == tool.eraserMode, { onChange(tool.copy(eraserMode = m)) },
@@ -917,6 +920,7 @@ private fun SelectionBar(
                 DropdownMenu(colors, { colors = false }) {
                     Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         PEN_COLORS.forEach { c -> ColorDot(c, false) { onColor(c); colors = false } }
+                        com.advnotes.app.ui.CustomColorDots(null) { c -> onColor(c); colors = false }
                     }
                 }
             }
@@ -999,6 +1003,7 @@ private fun TextBoxEditor(e: TextEdit, v: InkCanvasView, areaW: Int, onChange: (
             Text("${e.size.roundToInt()}", style = MaterialTheme.typography.labelLarge)
             TextButton(onClick = { onChange(cur.copy(size = (cur.size + 2f).coerceAtMost(120f))) }) { Text("A+") }
             PEN_COLORS.take(6).forEach { c -> Box(Modifier.padding(horizontal = 2.dp)) { ColorDot(c, c == e.color, 26.dp) { onChange(cur.copy(color = c)) } } }
+            com.advnotes.app.ui.CustomColorDots(e.color, 26.dp) { c -> onChange(cur.copy(color = c)) }
             IconButton(onClick = { onChange(cur.copy(text = "")); onDone() }) { Icon(Icons.Default.Delete, tr("Delete")) }
             IconButton(onClick = onDone) { Icon(Icons.Default.Check, tr("Done")) }
         }

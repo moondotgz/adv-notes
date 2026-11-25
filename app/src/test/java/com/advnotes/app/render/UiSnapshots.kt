@@ -22,6 +22,7 @@ import org.junit.Assert.assertTrue
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import org.junit.Rule
@@ -386,6 +387,27 @@ class UiSnapshots {
         pen(canvas, loop(lx + 60f, ly + 14f, 90f, 30f), { 0.5f })
         assertEquals(listOf(box.id), canvas.selectedTexts().map { it.id })
         snap("52_text_box_selected")
+    }
+
+    /** ＋ after the colour dots opens the picker; a hex colour becomes the pen colour and a recent colour. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w1280dp-h800dp-land-xhdpi")
+    fun colorPicker() {
+        val app = AdvNotesApp.instance
+        runBlocking { app.repo.save(Notebook(title = "Colours", paper = PaperStyle.PLAIN)) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Colours").performClick()
+        rule.waitForIdle()
+        rule.onAllNodesWithContentDescription("More colours…")[0].performClick()
+        rule.waitForIdle()
+        snap("55_color_picker")
+        rule.onNode(androidx.compose.ui.test.hasText("Hex", substring = true).and(androidx.compose.ui.test.hasSetTextAction()))
+            .performTextReplacement("#E91E63")
+        click("Select")
+        rule.waitForIdle()
+        val vm = findCanvas(rule.activity.window.decorView)!!.tool
+        assertEquals(0xFFE91E63.toInt(), vm.penColor)
+        assertEquals(0xFFE91E63.toInt(), com.advnotes.app.ui.CustomColors.list.first())
     }
 
     /** Regression: SHIFT legends pushed key labels out of the keys with big fonts. */
