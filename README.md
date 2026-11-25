@@ -79,6 +79,10 @@ Each provider has a ↻ button that loads its model list, plus a *Test connectio
 **Google Drive sync.** Notebooks sync two-way with an "Adv Notes" folder in your Drive, using the narrow `drive.file` scope. Sync runs automatically every hour and after you close a notebook. If a notebook was edited on two devices, you get a "(conflict copy)" instead of losing edits. Local deletions propagate.
 
 
+## Appearance
+
+Settings → Appearance: light, dark or system theme; your wallpaper colours, a preset or any custom colour; and a choice of fonts (system, serif, and the bundled Nunito, Lora, Atkinson Hyperlegible, Lexend, Caveat and JetBrains Mono, all under the SIL Open Font License, see `app/src/main/assets/licenses/fonts`).
+
 ## Languages
 
 English and Brazilian Portuguese (machine-translated). Pick one under **Settings → Language**; it follows the phone's language by default. Adding a language is a single JSON file, see [docs/TRANSLATING.md](docs/TRANSLATING.md).

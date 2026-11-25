@@ -74,6 +74,12 @@ data class AppSettings(
     val checkUpdates: Boolean = true,
     /** Master switch: when false nothing is sent to an AI provider and AI buttons are hidden. */
     val aiEnabled: Boolean = true,
+    /** "SYSTEM", "LIGHT" or "DARK". */
+    val themeMode: String = "SYSTEM",
+    /** Colour the app's palette is built from; 0 = wallpaper colours (Material You, Android 12+). */
+    val themeSeed: Int = 0,
+    /** App font: see ui/Theme.kt APP_FONTS. */
+    val appFont: String = "SYSTEM",
     /** Paper style for pages added to an imported PDF (the PDF's own pages keep their look). */
     val pdfPaper: String = "NARROW_GRID",
     /** Import PDFs without allowing new pages to be added. */
@@ -133,6 +139,9 @@ class SettingsStore(context: Context) {
         pageNav = prefs.getString("pageNav", null) ?: "ARROWS",
         checkUpdates = prefs.getBoolean("checkUpdates", true),
         aiEnabled = prefs.getBoolean("aiEnabled", true),
+        themeMode = prefs.getString("themeMode", null) ?: "SYSTEM",
+        themeSeed = prefs.getInt("themeSeed", 0),
+        appFont = prefs.getString("appFont", null) ?: "SYSTEM",
         pdfPaper = prefs.getString("pdfPaper", null) ?: "NARROW_GRID",
         pdfLockPages = prefs.getBoolean("pdfLockPages", false),
     )
@@ -156,6 +165,9 @@ class SettingsStore(context: Context) {
             .putString("pageNav", s.pageNav)
             .putBoolean("checkUpdates", s.checkUpdates)
             .putBoolean("aiEnabled", s.aiEnabled)
+            .putString("themeMode", s.themeMode)
+            .putInt("themeSeed", s.themeSeed)
+            .putString("appFont", s.appFont)
             .putString("pdfPaper", s.pdfPaper)
             .putBoolean("pdfLockPages", s.pdfLockPages)
             .apply()

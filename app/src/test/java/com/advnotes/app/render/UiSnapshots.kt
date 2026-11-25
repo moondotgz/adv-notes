@@ -410,6 +410,26 @@ class UiSnapshots {
         assertEquals(0xFFE91E63.toInt(), com.advnotes.app.ui.CustomColors.list.first())
     }
 
+    /** Appearance: dark theme, a preset palette and a bundled font apply to the whole app. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w1280dp-h800dp-land-xhdpi")
+    fun appearance() {
+        val app = AdvNotesApp.instance
+        runBlocking {
+            app.repo.save(Notebook(title = "Química", paper = PaperStyle.NARROW_GRID, cover = 0xFF0F8B6F.toInt()))
+            app.repo.save(Notebook(title = "History essay", paper = PaperStyle.COLLEGE_RULED, cover = 0xFFD9480F.toInt()))
+        }
+        app.settings.update { it.copy(themeMode = "DARK", themeSeed = com.advnotes.app.ui.THEME_SEEDS[1], appFont = "LORA") }
+        rule.waitForIdle()
+        snap("60_theme_dark_green_lora")
+        rule.onNodeWithContentDescriptionCompat("Settings")
+        snap("61_settings_appearance")
+        app.settings.update { it.copy(themeMode = "LIGHT", themeSeed = com.advnotes.app.ui.THEME_SEEDS[3], appFont = "NUNITO") }
+        rule.waitForIdle()
+        snap("62_theme_light_pink_nunito")
+        app.settings.update { it.copy(themeMode = "SYSTEM", themeSeed = 0, appFont = "SYSTEM") }
+    }
+
     /** Regression: SHIFT legends pushed key labels out of the keys with big fonts. */
     @Test
     @Config(sdk = [34], qualifiers = "w411dp-h891dp-night-xxhdpi", fontScale = 1.3f)

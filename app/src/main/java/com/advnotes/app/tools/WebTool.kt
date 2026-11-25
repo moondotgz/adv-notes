@@ -89,7 +89,7 @@ class WebTool(
     @SuppressLint("SetJavaScriptEnabled")
     @Composable
     override fun Content(host: ToolHost) {
-        val dark = isSystemInDarkTheme()
+        val dark = com.advnotes.app.ui.LocalAppDark.current
         // The app's live Material colours (wallpaper-based on Android 12+), handed to tools as CSS variables.
         val cs = androidx.compose.material3.MaterialTheme.colorScheme
         val panelBg = cs.surfaceColorAtElevation(2.dp)

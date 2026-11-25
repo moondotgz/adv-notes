@@ -1,5 +1,8 @@
 package com.advnotes.app.ui
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.filled.Palette
 import com.advnotes.app.i18n.tr
 
 import android.graphics.Bitmap
@@ -144,6 +147,29 @@ fun SettingsScreen(onBack: () -> Unit) {
                     tr("This translation was made by machine and may have mistakes. Corrections are welcome — see docs/TRANSLATING.md in the app's repository."),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
+            SettingsGroup(tr("Appearance"), Icons.Default.Palette) {
+                FieldLabel(tr("Theme"))
+                Segmented(listOf("SYSTEM" to tr("System"), "LIGHT" to tr("Light"), "DARK" to tr("Dark")), s.themeMode,
+                    { k -> app.settings.update { it.copy(themeMode = k) } })
+                FieldLabel(tr("Colours"), if (android.os.Build.VERSION.SDK_INT >= 31) tr("Wallpaper colours follow your phone's theme (Material You).") else null)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilterChip(s.themeSeed == 0, { app.settings.update { it.copy(themeSeed = 0) } },
+                        label = { Text(if (android.os.Build.VERSION.SDK_INT >= 31) tr("Wallpaper") else tr("Default")) })
+                    THEME_SEEDS.forEach { c -> ColorDot(c, s.themeSeed == c, 34.dp) { app.settings.update { it.copy(themeSeed = c) } } }
+                    CustomColorDots(s.themeSeed.takeIf { it != 0 }, 34.dp) { c -> app.settings.update { it.copy(themeSeed = c or 0xFF000000.toInt()) } }
+                }
+                FieldLabel(tr("Font"))
+                APP_FONTS.forEach { (key, name, family) ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { app.settings.update { it.copy(appFont = key) } }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(s.appFont == key, { app.settings.update { it.copy(appFont = key) } })
+                        Text(tr(name), fontFamily = family, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
             }
 
             SettingsGroup(tr("Pen & touch"), Icons.Default.Draw) {
