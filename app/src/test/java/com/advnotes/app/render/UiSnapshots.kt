@@ -373,6 +373,19 @@ class UiSnapshots {
         rule.waitForIdle()
         assertEquals(1, canvas.page.texts.size)
         assertTrue(canvas.page.texts.single().text.endsWith("(in chloroplasts)"))
+
+        // lasso: a tap on the box selects it…
+        rule.onNodeWithContentDescriptionCompat("Lasso")
+        val box = canvas.page.texts.single()
+        val cx = canvas.pageToViewX(box.x + box.width / 2); val cy = canvas.pageToViewY(box.y + 8f)
+        pen(canvas, listOf(cx to cy, cx + 1f to cy), { 0.5f })
+        assertEquals(listOf(box.id), canvas.selectedTexts().map { it.id })
+        canvas.clearSelection()
+        // …and so does a small loop around just its first line
+        val lx = canvas.pageToViewX(box.x); val ly = canvas.pageToViewY(box.y)
+        pen(canvas, loop(lx + 60f, ly + 14f, 90f, 30f), { 0.5f })
+        assertEquals(listOf(box.id), canvas.selectedTexts().map { it.id })
+        snap("52_text_box_selected")
     }
 
     /** Regression: SHIFT legends pushed key labels out of the keys with big fonts. */

@@ -915,11 +915,25 @@ class InkCanvasView(context: Context) : View(context) {
     // ------------------------------------------------------------------------------------
 
     private fun finishLasso() {
+        // A tap (no real loop drawn) selects the text box or picture under the pen — big boxes are hard to circle.
+        var l0 = Float.MAX_VALUE; var t0 = Float.MAX_VALUE; var r0 = -Float.MAX_VALUE; var b0 = -Float.MAX_VALUE
+        for (i in lassoPts.indices step 2) { l0 = min(l0, lassoPts[i]); r0 = max(r0, lassoPts[i]); t0 = min(t0, lassoPts[i + 1]); b0 = max(b0, lassoPts[i + 1]) }
+        if (lassoPts.size >= 2 && max(r0 - l0, b0 - t0) * scale < 14 * density) {
+            val px = lassoPts[0]; val py = lassoPts[1]
+            val text = page.texts.lastOrNull { t -> px >= t.x && px <= t.x + t.width && py >= t.y && py <= t.y + renderer.textHeight(t) }
+            val image = if (text == null) page.images.lastOrNull { im -> px >= im.x && px <= im.x + im.w && py >= im.y && py <= im.y + im.h } else null
+            if (text != null || image != null) setSelection(emptySet(), setOfNotNull(text?.id), setOfNotNull(image?.id))
+            return
+        }
         if (lassoPts.size < 6) return
         val poly = lassoPts.toFloatArray()
         val strokes = page.strokes.filter { Geometry.strokeInPolygon(it, poly) }
+        // a text box counts when the loop takes in where it starts, its first line or its middle
         val texts = page.texts.filter { t ->
-            Geometry.pointInPolygon(t.x + t.width / 2, t.y + renderer.textHeight(t) / 2, poly)
+            val h = renderer.textHeight(t); val line = min(h, t.size * 1.3f)
+            Geometry.pointInPolygon(t.x + t.width / 2, t.y + h / 2, poly) ||
+                Geometry.pointInPolygon(t.x + min(t.width, 60f) / 2, t.y + line / 2, poly) ||
+                Geometry.pointInPolygon(t.x + t.width / 2, t.y + line / 2, poly)
         }
         val images = page.images.filter { im -> Geometry.pointInPolygon(im.x + im.w / 2, im.y + im.h / 2, poly) }
         if (strokes.isEmpty() && texts.isEmpty() && images.isEmpty()) {
