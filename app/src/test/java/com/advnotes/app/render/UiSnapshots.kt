@@ -451,6 +451,31 @@ class UiSnapshots {
         app.settings.update { it.copy(editorTheme = "", themeMode = "SYSTEM") }
     }
 
+    /** Text boxes keep their own font, chosen from the Aa menu in the text bar. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w1280dp-h800dp-land-xhdpi")
+    fun textBoxFonts() {
+        val app = AdvNotesApp.instance
+        runBlocking { app.repo.save(Notebook(title = "Fonts", paper = PaperStyle.COLLEGE_RULED)) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Fonts").performClick()
+        rule.waitForIdle()
+        val canvas = findCanvas(rule.activity.window.decorView)!!
+        rule.onNodeWithContentDescriptionCompat("Text")
+        var y = 260f
+        for ((key, label) in listOf("CAVEAT" to "Caveat (handwriting)", "LORA" to "Lora (book)", "MONO" to "JetBrains Mono", "NUNITO" to "Nunito (rounded)")) {
+            pen(canvas, (0..20).map { i -> (160f + i * 40f) to y }, { 0.5f })
+            rule.waitForIdle()
+            click("Aa"); click(label)
+            rule.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextInput("The quick brown fox in $label")
+            rule.onNodeWithContentDescriptionCompat("Done")
+            rule.waitForIdle()
+            assertEquals(key, canvas.page.texts.last().font)
+            y += 150f
+        }
+        snap("53_text_box_fonts")
+    }
+
     /** Regression: SHIFT legends pushed key labels out of the keys with big fonts. */
     @Test
     @Config(sdk = [34], qualifiers = "w411dp-h891dp-night-xxhdpi", fontScale = 1.3f)

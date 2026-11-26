@@ -377,7 +377,7 @@ private fun CalcMode(
                         value = input,
                         onValueChange = { input = it; error = null; fresh = false },
                         readOnly = keypad,
-                        textStyle = TextStyle(fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurface),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurface),
                         visualTransformation = visual,
                         singleLine = false,
                         modifier = Modifier.weight(1f).heightIn(min = 32.dp),
@@ -531,7 +531,9 @@ private fun KeyCap(
         KeyAccent.Normal -> cs.surfaceContainerHigh to cs.onSurface
     }
     // Tight line boxes so two labels fit regardless of the system font (some fonts have very tall line heights).
-    val tight = TextStyle(
+    // Based on the app typography so the keys use the font chosen in Settings → Appearance.
+    val tight = MaterialTheme.typography.labelLarge.copy(
+        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
         platformStyle = PlatformTextStyle(includeFontPadding = false),
         lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
     )

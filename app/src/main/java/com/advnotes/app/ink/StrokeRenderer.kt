@@ -75,6 +75,7 @@ class StrokeRenderer(var pressureCurve: Float = 1f) {
     fun layout(t: TextBox): StaticLayout = textCache.get(t) ?: run {
         textPaint.textSize = t.size
         textPaint.color = t.color
+        textPaint.typeface = TextFonts.typeface(t.font)
         StaticLayout.Builder.obtain(t.text, 0, t.text.length, TextPaint(textPaint), t.width.toInt().coerceAtLeast(20))
             .setAlignment(Layout.Alignment.ALIGN_NORMAL)
             .setLineSpacing(0f, 1.15f)

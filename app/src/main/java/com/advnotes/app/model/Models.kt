@@ -92,6 +92,8 @@ data class TextBox(
     val text: String,
     val size: Float = 22f,
     val color: Int = 0xFF1A1A1A.toInt(),
+    /** Font key (SYSTEM, SERIF, NUNITO, LORA, ATKINSON, LEXEND, CAVEAT, MONO); see ink/TextFonts. */
+    val font: String = "SYSTEM",
 ) {
     fun translated(dx: Float, dy: Float) = copy(x = x + dx, y = y + dy)
 }

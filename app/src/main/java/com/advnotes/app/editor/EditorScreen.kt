@@ -157,7 +157,7 @@ import kotlin.math.roundToInt
 /** A text box being typed into on the page. Position and width are in page units. */
 private data class TextEdit(
     val slot: Int, val x: Float, val y: Float, val width: Float, val existing: TextBox?,
-    val text: String, val size: Float, val color: Int,
+    val text: String, val size: Float, val color: Int, val font: String = "SYSTEM",
 )
 
 private data class HwRequest(val strokes: List<com.advnotes.app.model.Stroke>, val image: Bitmap?)
@@ -179,6 +179,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
     var textEdit by remember { mutableStateOf<TextEdit?>(null) }
     var viewportTick by remember { mutableStateOf(0) }       // bumped on pan/zoom so the text editor follows the page
     var lastTextSize by remember { mutableStateOf(22f) }
+    var lastTextFont by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("SYSTEM") }
     var aiImage by remember { mutableStateOf<Bitmap?>(null) }
     var aiBounds by remember { mutableStateOf<RectF?>(null) }
     var hwRequest by remember { mutableStateOf<HwRequest?>(null) }
@@ -266,12 +267,13 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
         textEdit = null
         canvases[e.slot]?.editingTextId = null
         val old = e.existing
-        if (old != null && old.text == e.text && old.size == e.size && old.color == e.color && old.width == e.width) return
-        vm.upsertText(e.x, e.y, old, e.text, e.size, e.color, e.width)
+        if (old != null && old.text == e.text && old.size == e.size && old.color == e.color && old.width == e.width && old.font == e.font) return
+        vm.upsertText(e.x, e.y, old, e.text, e.size, e.color, e.width, e.font)
     }
     fun startText(slot: Int, x: Float, y: Float, existing: TextBox?, width: Float) {
         finishText()
-        textEdit = TextEdit(slot, x, y, width, existing, existing?.text ?: "", existing?.size ?: lastTextSize, existing?.color ?: tool.penColor)
+        textEdit = TextEdit(slot, x, y, width, existing, existing?.text ?: "", existing?.size ?: lastTextSize, existing?.color ?: tool.penColor,
+            existing?.font ?: lastTextFont)
         canvases[slot]?.let { v ->
             v.editingTextId = existing?.id
             if (v.pageToViewY(y) > v.height * 0.4f) v.revealPageY(y)   // keep it clear of the keyboard
@@ -505,7 +507,7 @@ fun EditorScreen(notebookId: String, onBack: () -> Unit, onSettings: () -> Unit)
                         val v = canvases[slot]
                         if (v != null) {
                             viewportTick   // re-place on pan/zoom
-                            TextBoxEditor(e, v, boxW, onChange = { textEdit = it; lastTextSize = it.size }, onDone = { finishText() })
+                            TextBoxEditor(e, v, boxW, onChange = { textEdit = it; lastTextSize = it.size; lastTextFont = it.font }, onDone = { finishText() })
                         }
                     }
                     if (slot == activeSlot) selInfo?.let { s ->
@@ -957,7 +959,11 @@ private fun TextBoxEditor(e: TextEdit, v: InkCanvasView, areaW: Int, onChange: (
         androidx.compose.foundation.text.BasicTextField(
             value = tfv,
             onValueChange = { tfv = it; if (it.text != cur.text) onChange(cur.copy(text = it.text)) },
-            textStyle = androidx.compose.ui.text.TextStyle(color = androidx.compose.ui.graphics.Color(e.color), fontSize = with(d) { (e.size * s).toSp() }),
+            textStyle = androidx.compose.ui.text.TextStyle(
+                color = androidx.compose.ui.graphics.Color(e.color), fontSize = with(d) { (e.size * s).toSp() },
+                fontFamily = com.advnotes.app.ui.APP_FONTS.firstOrNull { it.first == e.font }?.third,
+                lineHeight = androidx.compose.ui.unit.TextUnit(1.15f, androidx.compose.ui.unit.TextUnitType.Em),
+            ),
             cursorBrush = androidx.compose.ui.graphics.SolidColor(primary),
             modifier = Modifier
                 .fillMaxWidth()
@@ -1002,6 +1008,20 @@ private fun TextBoxEditor(e: TextEdit, v: InkCanvasView, areaW: Int, onChange: (
             TextButton(onClick = { onChange(cur.copy(size = (cur.size - 2f).coerceAtLeast(10f))) }) { Text("A−") }
             Text("${e.size.roundToInt()}", style = MaterialTheme.typography.labelLarge)
             TextButton(onClick = { onChange(cur.copy(size = (cur.size + 2f).coerceAtMost(120f))) }) { Text("A+") }
+            Box {
+                var fontMenu by remember { mutableStateOf(false) }
+                val fam = com.advnotes.app.ui.APP_FONTS.firstOrNull { it.first == e.font }?.third
+                TextButton(onClick = { fontMenu = true }) { Text("Aa", fontFamily = fam, style = MaterialTheme.typography.titleMedium) }
+                DropdownMenu(fontMenu, { fontMenu = false }) {
+                    com.advnotes.app.ui.APP_FONTS.forEach { (key, name, family) ->
+                        DropdownMenuItem(
+                            text = { Text(tr(name), fontFamily = family) },
+                            leadingIcon = { if (key == e.font) Icon(Icons.Default.Check, null) },
+                            onClick = { fontMenu = false; onChange(cur.copy(font = key)) },
+                        )
+                    }
+                }
+            }
             PEN_COLORS.take(6).forEach { c -> Box(Modifier.padding(horizontal = 2.dp)) { ColorDot(c, c == e.color, 26.dp) { onChange(cur.copy(color = c)) } } }
             com.advnotes.app.ui.CustomColorDots(e.color, 26.dp) { c -> onChange(cur.copy(color = c)) }
             IconButton(onClick = { onChange(cur.copy(text = "")); onDone() }) { Icon(Icons.Default.Delete, tr("Delete")) }

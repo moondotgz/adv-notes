@@ -356,14 +356,14 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Adds, changes or (when [text] is blank) removes a text box. [width] is where lines wrap, in page units. */
-    fun upsertText(x: Float, y: Float, existing: TextBox?, text: String, size: Float, color: Int, width: Float? = null) {
+    fun upsertText(x: Float, y: Float, existing: TextBox?, text: String, size: Float, color: Int, width: Float? = null, font: String? = null) {
         val p = currentPage ?: return
         val w = width ?: existing?.width ?: (PAGE_WIDTH - x - 10f * MM).coerceAtLeast(120f)
         val texts = when {
             existing != null && text.isBlank() -> p.texts.filter { it.id != existing.id }
-            existing != null -> p.texts.map { if (it.id == existing.id) it.copy(text = text, size = size, color = color, width = w) else it }
+            existing != null -> p.texts.map { if (it.id == existing.id) it.copy(text = text, size = size, color = color, width = w, font = font ?: it.font) else it }
             text.isBlank() -> return
-            else -> p.texts + TextBox(x = x, y = y, width = w, text = text, size = size, color = color)
+            else -> p.texts + TextBox(x = x, y = y, width = w, text = text, size = size, color = color, font = font ?: "SYSTEM")
         }
         commit(p.copy(texts = texts))
     }
